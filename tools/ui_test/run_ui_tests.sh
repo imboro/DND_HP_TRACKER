@@ -20,7 +20,7 @@ python3 "$HERE/make_harness.py" gui_main.cpp "$HERE/test_body.inc" "$OUT/gui_tes
 
 I=third_party/imgui
 g++ -std=c++17 -O1 -I$I -I$I/backends -I. $(sdl2-config --cflags) "$OUT/gui_test.cpp" \
-    creature.cpp encounter.cpp dice.cpp difficulty.cpp \
+    creature.cpp encounter.cpp difficulty.cpp \
     $I/imgui.cpp $I/imgui_draw.cpp $I/imgui_tables.cpp $I/imgui_widgets.cpp \
     $I/backends/imgui_impl_sdl2.cpp $I/backends/imgui_impl_sdlrenderer2.cpp \
     $(sdl2-config --libs) -o "$OUT/gui_test" 2> "$OUT/build.log" || { grep -E "error" "$OUT/build.log" | head -20; exit 1; }

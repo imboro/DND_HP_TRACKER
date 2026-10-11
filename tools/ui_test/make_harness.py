@@ -15,9 +15,8 @@ rep('#include "creature.h"\n', '#include "creature.h"\n#include <map>\n'
     'static float g_scrollCombat = -1;\nstatic std::string g_scrollTo;\nstatic ImVec2 g_boardOrigin;\nstatic ImVec2 g_boardSize;\nstatic float g_lineH = 0;\n')
 rep('    const bool pressed = ImGui::Button(label, drawSize);\n',
     '    const bool pressed = ImGui::Button(label, drawSize);\n    g_rects[label] = ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());\n    if (!g_scrollTo.empty() && g_scrollTo == label) ImGui::SetScrollHereY(0.5f);\n')
-for i, name in enumerate(["Combat", "Add", "Log"]):
-    rep('ImGui::BeginTabItem("%s")' % name,
-        'ImGui::BeginTabItem("%s", nullptr, g_forceTab == %d ? ImGuiTabItemFlags_SetSelected : 0)' % (name, i))
+rep('segmentedTabs(TAB_LABELS, 3, &activeTab, S);',
+    'if (g_forceTab >= 0) activeTab = g_forceTab;\n        segmentedTabs(TAB_LABELS, 3, &activeTab, S);')
 rep('const std::string path = savePath("encounter.txt");', 'const std::string path = "%s/test_save.txt";' % scratch)
 rep('const std::string settingsPath = savePath("settings.txt");', 'const std::string settingsPath = "%s/test_settings.txt";' % scratch)
 rep('const std::string libraryPath = savePath("library.txt");', 'const std::string libraryPath = "%s/test_library.txt";' % scratch)

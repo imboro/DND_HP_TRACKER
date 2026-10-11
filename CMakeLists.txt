@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(SDL2 REQUIRED)
 
-set(LOGIC_SOURCES creature.cpp encounter.cpp dice.cpp difficulty.cpp)
+set(LOGIC_SOURCES creature.cpp encounter.cpp difficulty.cpp)
 
 # Console demo
 add_executable(console_demo main.cpp ${LOGIC_SOURCES})

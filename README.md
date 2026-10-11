@@ -42,7 +42,7 @@ the tracker keeps the numbers straight.
 2. On first launch you get a sample Hero, Goblin and Orc. Delete them by dragging
    them onto the trash can, or use **New encounter > Remove everything**.
 3. Add your party and monsters in the **Add** tab.
-4. Type an amount (`8` or `2d6+3`) in the **Amount** box and press **Damage** or
+4. Type an amount (e.g. `8`) in the **Amount** box and press **Damage** or
    **Heal** on a card.
 
 Everything autosaves, so closing the app never loses the fight.
@@ -54,11 +54,10 @@ Everything autosaves, so closing the app never loses the fight.
 **Left: the sidebar**
 
 - **Summary** (always visible)
+  - Three tiles: the round number, how many enemies are still standing, and
+    the party's total HP (hover a tile for details).
   - The encounter status: *In progress*, *Enemies defeated*, *Party down!*,
     *Party defeated* or *Encounter over*.
-  - The round number.
-  - How many enemies are still standing.
-  - The party's total HP.
   - The encounter difficulty.
 - **Combat** tab
   - The damage/heal amount.
@@ -81,7 +80,7 @@ Everything autosaves, so closing the app never loses the fight.
 
 | Part | Meaning |
 |---|---|
-| Top stripe and icon tile | Blue = player, red = enemy, gray = dead |
+| Icon tile | Blue = player, red = enemy, gray = dead |
 | Icon | Heart = player, lightning bolt = enemy, X = dead |
 | `35 / 40 HP +5 temp` | Current / max HP, and temporary HP in blue |
 | `AC 15 · 30 ft · PP 12` | Armor Class, speed, passive Perception |
@@ -115,17 +114,8 @@ conditions with durations, and notes.
 ### The Amount box
 
 The **Amount** box at the top of the Combat tab feeds every Damage/Heal button.
-It accepts:
-
-- **Numbers**: `7`, `12`
-- **Dice**: `d20`, `2d6`, `8d6`, `2d6+3`, `1d8 + 1d6 - 1`
-
-With dice in the box, **every press rolls fresh**. The roll is shown under the box
-("Last roll: 2d6[3,5] + 3 = 11") and recorded in the log. Next to the box,
-*flat* means a plain number, *rolls* means dice, and a red **?** means it can't be
-read; hover it to see why.
-
-The quick buttons fill the box: **1 5 10 20** and **1d4 … 1d20**.
+It takes a plain number: type it, use the **-**/**+** steppers, or press one of
+the quick buttons **1 5 10 20**. Roll your dice at the table and type the total.
 
 ### What happens on a hit
 
@@ -160,21 +150,20 @@ temp HP soaked it all, or `IMMUNE`.
 
 | Button | What it does |
 |---|---|
-| **Damage all** | Rolls the amount **once** and applies it to every selected creature (each one's resistances still apply) |
-| **Half of last (N)** | Applies half of the last roll, for creatures that made their save |
+| **Damage all** | Applies the amount to every selected creature (each one's resistances still apply) |
+| **Half damage (N)** | Applies half the amount (rounded down), for creatures that made their save |
 | **Heal all** | Heals every selected creature |
 | **Give temp HP** | Grants temp HP (it doesn't stack; each keeps the higher value) |
 | **Apply condition** / **Remove it** | Uses the condition list and rounds next to it (0 rounds = until removed) |
-| **Clear conditions** | Removes all conditions |
+| **Clear conds.** | Removes all conditions |
 | **Toggle conc.** | Turns concentration on or off |
 | **Duplicate** / **Delete** | Copies or removes the selected cards |
 
 **Example: a Fireball (8d6, DEX save for half) on four goblins**
 
-1. Type `8d6` in the Amount box.
-2. Select the goblins that **failed** the save and press **Damage all**. Say it
-   rolls 28.
-3. Select the goblins that **succeeded** and press **Half of last (14)**.
+1. Roll 8d6 at the table (say 28) and type `28` in the Amount box.
+2. Select the goblins that **failed** the save and press **Damage all**.
+3. Select the goblins that **succeeded** and press **Half damage (14)**.
 
 Dragging a selected card moves the whole selection together.
 
@@ -309,10 +298,12 @@ left out.
 - death save failures and deaths
 - conditions running out
 
-Click an alert (or its X) to dismiss it, or use **Dismiss all**. Repeated
-identical alerts are merged.
+Alerts stay for about 6 seconds, then slowly fade away on their own; there is
+nothing to dismiss, and clicks pass straight through them to the board. Repeated
+identical alerts are merged (and their timer restarts). Everything they said is
+also in the log.
 
-The **Log** tab records every hit, heal, roll, condition, round, addition and
+The **Log** tab records every hit, heal, condition, round, addition and
 removal, labeled with its round (`R3`). **Copy log** puts it on the clipboard,
 which is handy for session notes.
 
@@ -386,7 +377,7 @@ Ctrl works in place of Cmd. Shortcuts are ignored while you're typing in a text 
 - Bloodied = at or below half max HP.
 - Difficulty: 5e DMG (2014) XP thresholds and monster multipliers.
 - "CRIT!" is only an animation for big swings (≥ 40% of max HP). It doesn't
-  double dice; roll critical hits yourself (e.g. `4d6+3`).
+  double anything; roll critical hits yourself and type the total.
 
 ---
 
@@ -399,7 +390,7 @@ included in `third_party/imgui`.
 cmake -S . -B build
 cmake --build build
 open "build/DnD HP Tracker.app"   # the tracker
-./build/logic_tests               # rules tests (damage, death saves, dice, difficulty...)
+./build/logic_tests               # rules tests (damage, death saves, conditions, difficulty...)
 ./build/console_demo              # small console demo of the rules classes
 ```
 
@@ -427,9 +418,8 @@ writes screenshots to `build/ui_test/`.
 |---|---|
 | `creature.h/.cpp` | A combatant: HP, temp HP, stats, resistances, conditions, concentration, death saves |
 | `encounter.h/.cpp` | Players and enemies, plus the rules triggered by hits (concentration DC, death saves, massive damage) |
-| `dice.h/.cpp` | Dice expression parser and roller (`2d6+3`) |
 | `difficulty.h/.cpp` | 5e encounter difficulty, CR/XP table |
-| `gui_main.cpp` | The window: board, cards, sidebar, animations, saving, library |
+| `gui_main.cpp` | The window: board, cards, sidebar, animations, saving, library. The light ink-outline theme (palette, `inkBox`, section boxes) is at the top |
 | `logic_tests.cpp` | Tests for the rules layer |
 | `main.cpp` | Console demo |
 | `package_mac.sh` | Builds the shareable app bundle and zip |

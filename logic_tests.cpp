@@ -1,9 +1,7 @@
 // Checks the game-rules layer (no UI). Build target: logic_tests.
 #include <cstdio>
-#include <random>
 #include <string>
 #include "creature.h"
-#include "dice.h"
 #include "difficulty.h"
 #include "encounter.h"
 
@@ -111,27 +109,6 @@ static void testConditions() {
     CHECK(g->getConditions().empty());
 }
 
-static void testDice() {
-    std::mt19937 rng(1234);
-    DiceRoll r = rollExpression("12", rng);
-    CHECK(r.ok && r.total == 12 && !r.hasDice);
-    for (int i = 0; i < 200; i++) {
-        r = rollExpression("2d6+3", rng);
-        CHECK(r.ok && r.hasDice && r.total >= 5 && r.total <= 15);
-        r = rollExpression("d20", rng);
-        CHECK(r.ok && r.total >= 1 && r.total <= 20);
-        r = rollExpression(" 1d8 + 1D6 - 1 ", rng);
-        CHECK(r.ok && r.total >= 1 && r.total <= 13);
-    }
-    CHECK(!rollExpression("", rng).ok);
-    CHECK(!rollExpression("abc", rng).ok);
-    CHECK(!rollExpression("2d", rng).ok);
-    CHECK(!rollExpression("1000d6", rng).ok);
-    CHECK(!rollExpression("3d6x", rng).ok);
-    r = rollExpression("1d1+1d1", rng);
-    CHECK(r.ok && r.total == 2 && r.detail == "1d1[1] + 1d1[1] = 2");
-}
-
 static void testDifficulty() {
     // Party of four level 1: thresholds 100/200/300/400.
     DifficultyReport r = rateEncounter({1, 1, 1, 1}, {50, 50});  // 2 goblins, 100 XP x1.5 = 150
@@ -153,7 +130,6 @@ int main() {
     testDamageRules();
     testDeathSavesAndConcentration();
     testConditions();
-    testDice();
     testDifficulty();
     if (failures == 0) {
         std::printf("All logic tests passed.\n");

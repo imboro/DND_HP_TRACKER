@@ -4,6 +4,7 @@
             static size_t si = 0;
             static int waitFrames = 0;
             static int fails = 0;
+            static double holdUntil = 0.0;  // steps pause until this ImGui time
             static std::vector<std::pair<int, std::function<void()>>> steps;
             static std::function<void(float, float)> motion;
             static std::function<void(bool, float, float)> button;
@@ -53,16 +54,18 @@
                     steps.push_back({1, [=]() { key(false, sym, sc, KMOD_LGUI); }});
                     steps.push_back({3, [=]() { key(false, SDLK_LGUI, SDL_SCANCODE_LGUI, 0); }});
                 };
-                static auto setAmount = [&](const char* v) { steps.push_back({2, [&, v]() { std::snprintf(amountExpr, sizeof(amountExpr), "%s", v); }}); };
+                static auto setAmount = [&](int v) { steps.push_back({2, [&, v]() { actionAmount = v; }}); };
                 static auto act = [&](int after, std::function<void()> f) { steps.push_back({after, f}); };
                 static auto alertHas = [&](const std::string& t) { for (auto& a : alerts) if (a.text.find(t) != std::string::npos) return true; return false; };
+                static auto alertNamed = [&](const std::string& t) -> const Alert* { for (auto& a : alerts) if (a.text == t) return &a; return nullptr; };
+                static auto waitSeconds = [&](double sec) { steps.push_back({1, [&, sec]() { holdUntil = ImGui::GetTime() + sec; }}); };
 
                 act(10, [&]() { g_shot = "01_default"; });
-                // 1) Card damage with a dice expression
-                setAmount("2d6+3");
+                // 1) Card damage with a plain amount
+                setAmount(3);
                 clickAt([=]() { return dmgPt("Goblin"); });
-                act(2, [&]() { check(C("Goblin")->getCurrentHp() < 7, "dice damage from card button hits Goblin (hp " + std::to_string(C("Goblin")->getCurrentHp()) + ")");
-                               bool found = false; for (auto& e : log) if (e.text.find("Goblin takes") != std::string::npos && e.text.find("2d6[") != std::string::npos) found = true; check(found, "log records the hit with its dice roll"); });
+                act(2, [&]() { check(C("Goblin")->getCurrentHp() == 4, "card Damage button deals the amount: Goblin 7 -> 4 (hp " + std::to_string(C("Goblin")->getCurrentHp()) + ")");
+                               bool found = false; for (auto& e : log) if (e.text.find("Goblin takes 3") != std::string::npos) found = true; check(found, "log records the hit"); });
                 act(80, [&]() {});
                 // 2) Box-select from the empty top-left corner
                 act(2, [&]() { motion(g_boardOrigin.x + 8 * s, g_boardOrigin.y + 8 * s); button(true, g_boardOrigin.x + 8 * s, g_boardOrigin.y + 8 * s); });
@@ -74,22 +77,22 @@
                 clickAt([=]() { return bodyPt("Goblin"); });
                 shiftClick([=]() { return bodyPt("Orc"); });
                 act(1, [&]() { check(selectedRefs().size() == 2 && board.get(findRef("Orc")).selected && !board.get(findRef("Hero")).selected, "click + shift-click selects Goblin and Orc (" + std::to_string(selectedRefs().size()) + ")"); });
-                // 4) Area damage, then half of last roll
-                setAmount("10");
+                // 4) Area damage, then half damage for the ones that saved
+                setAmount(10);
                 clickAt([=]() { return rectCenter("Damage all"); });
                 act(1, [&]() { check(C("Orc")->getCurrentHp() == 5 && C("Goblin")->getCurrentHp() == 0, "Damage all: Orc 15->5, Goblin to 0 (orc " + std::to_string(C("Orc")->getCurrentHp()) + ")"); });
-                clickAt([=]() { return rectCenter("Half of last (5)"); });
-                act(1, [&]() { check(C("Orc")->getCurrentHp() == 0, "Half of last roll deals 5 to Orc"); });
+                clickAt([=]() { return rectCenter("Half damage (5)"); });
+                act(1, [&]() { check(C("Orc")->getCurrentHp() == 0, "Half damage deals 5 to Orc"); });
                 // 5) Undo twice with Cmd+Z
                 cmdKey(SDLK_z, SDL_SCANCODE_Z);
                 cmdKey(SDLK_z, SDL_SCANCODE_Z);
                 act(2, [&]() { check(C("Orc")->getCurrentHp() == 15, "Cmd+Z twice restores Orc to 15 (" + std::to_string(C("Orc")->getCurrentHp()) + ")"); });
                 // 6) Temp HP on the Hero, concentration, then a hit
                 clickAt([=]() { return bodyPt("Hero"); });
-                setAmount("5");
+                setAmount(5);
                 clickAt([=]() { return rectCenter("Give temp HP"); });
                 act(2, [&]() { check(C("Hero")->getTempHp() == 5, "Give temp HP: Hero has 5 temp"); C("Hero")->setConcentrating(true); });
-                setAmount("8");
+                setAmount(8);
                 clickAt([=]() { return dmgPt("Hero"); });
                 act(2, [&]() { check(C("Hero")->getTempHp() == 0 && C("Hero")->getCurrentHp() == 37, "temp HP absorbs first: Hero 37/40, temp 0 (hp " + std::to_string(C("Hero")->getCurrentHp()) + ")");
                                check(alertHas("Hero: concentration save, DC 10"), "concentration alert DC 10"); });
@@ -100,11 +103,11 @@
                 act(3, [&]() { key(true, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
                 act(3, [&]() { key(false, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
                 // 8) Drop the Hero to 0, hit again (death save), click a success pip
-                setAmount("37");
+                setAmount(37);
                 clickAt([=]() { return dmgPt("Hero"); });
                 act(2, [&]() { check(C("Hero")->getCurrentHp() == 0 && !C("Hero")->isConcentrating() && alertHas("loses concentration"), "Hero at 0 loses concentration"); });
                 act(70, [&]() {});
-                setAmount("1");
+                setAmount(1);
                 clickAt([=]() { return dmgPt("Hero"); });
                 act(2, [&]() { check(C("Hero")->getDeathFailures() == 1 && alertHas("death save failure (1/3)"), "hit at 0 HP = death save failure 1/3"); });
                 clickAt([=]() { return pipPt("Hero", 0, 0); });
@@ -120,13 +123,13 @@
                 act(3, [&]() {});
                 clickAt([=]() { return rectCenter("End round"); });
                 act(2, [&]() { g_scrollTo.clear(); g_shot = "04b_toasts"; });
-                act(1, [&]() { std::printf("  alerts before dismiss: %zu\n", alerts.size()); });
-                // click the first toast (top-right of the board) to dismiss it
-                clickAt([=]() { return ImVec2(g_boardOrigin.x + g_boardSize.x - 20 * s - 170 * s, g_boardOrigin.y + 16 * s + 14 * s); });
-                act(1, [&]() { std::printf("  alerts after dismiss: %zu\n", alerts.size()); });
+                // clicking where the toasts are must not dismiss them (they only fade)
+                act(1, [&]() { std::printf("  alerts on screen: %zu\n", alerts.size()); });
+                clickAt([=]() { return ImVec2(g_boardOrigin.x + g_boardSize.x - 22 * s - 170 * s, g_boardOrigin.y + 16 * s + 14 * s); });
+                act(1, [&]() { check(alertHas("Orc: Poisoned ended"), "clicking a toast does not dismiss it"); });
                 act(2, [&]() { check(board.round == 2 && !C("Orc")->hasCondition("Poisoned") && C("Orc")->hasCondition("Prone") && alertHas("Orc: Poisoned ended"), "End round: round 2, Poisoned expired with alert, Prone stays"); });
                 // 10) Resistance halves damage
-                setAmount("9");
+                setAmount(9);
                 clickAt([=]() { return dmgPt("Orc"); });
                 act(2, [&]() { check(C("Orc")->getCurrentHp() == 11, "resistant Orc takes 4 from 9 (" + std::to_string(C("Orc")->getCurrentHp()) + ")"); });
                 // 11) Duplicate with Cmd+D (Orc is selected)
@@ -181,9 +184,19 @@
                 act(2, [&]() { g_forceTab = 2; });
                 act(3, [&]() { g_shot = "08_log"; });
                 act(2, [&]() { g_forceTab = 0; });
+                // 18) Alerts fade out on their own
+                act(2, [&]() { addAlert("Fade test", COL_AMBER); });
+                waitSeconds(3.0);
+                act(1, [&]() { const Alert* a = alertNamed("Fade test"); check(a && alertOpacity(*a, ImGui::GetTime()) == 1.0f, "alert fully visible after 3 s"); });
+                waitSeconds(3.9);
+                act(1, [&]() { const Alert* a = alertNamed("Fade test"); const float o = a ? alertOpacity(*a, ImGui::GetTime()) : -1.0f;
+                               check(a && o > 0.0f && o < 1.0f, "alert is fading after ~7 s (opacity " + std::to_string(o) + ")"); g_shot = "10_fading"; });
+                waitSeconds(1.5);
+                act(1, [&]() { check(!alertHas("Fade test"), "alert gone after the fade"); });
                 act(3, [&]() { g_forceTab = -1; std::printf("%s: %d failure(s)\n", fails ? "DONE WITH FAILURES" : "ALL UI CHECKS PASSED", fails); running = false; });
             }
-            if (waitFrames > 0) {
+            if (ImGui::GetTime() < holdUntil) {
+            } else if (waitFrames > 0) {
                 waitFrames--;
             } else if (si < steps.size()) {
                 steps[si].second();
