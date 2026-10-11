@@ -1,0 +1,2 @@
+// Windows resources for the tracker. Regenerate the icon with tools/make_icons.py.
+1 ICON "icon/hptracker.ico"

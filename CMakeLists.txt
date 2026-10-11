@@ -31,6 +31,12 @@ if(WIN32)
     # SDL2main provides WinMain; WIN32_EXECUTABLE means no console window.
     target_link_libraries(hp_tracker_gui PRIVATE SDL2::SDL2main SDL2::SDL2)
     set_target_properties(hp_tracker_gui PROPERTIES WIN32_EXECUTABLE TRUE OUTPUT_NAME "DnD HP Tracker")
+    # The app icon (windows/icon/hptracker.ico) is compiled in as a resource.
+    enable_language(RC)
+    set(APP_ICON ${CMAKE_SOURCE_DIR}/windows/icon/hptracker.ico)
+    set_source_files_properties(${CMAKE_SOURCE_DIR}/windows/app.rc PROPERTIES OBJECT_DEPENDS ${APP_ICON})
+    target_sources(hp_tracker_gui PRIVATE ${CMAKE_SOURCE_DIR}/windows/app.rc)
+    target_include_directories(hp_tracker_gui PRIVATE ${CMAKE_SOURCE_DIR}/windows)
     # Put SDL2.dll beside the built .exe so it runs straight from the build folder.
     add_custom_command(TARGET hp_tracker_gui POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:hp_tracker_gui>)
@@ -59,7 +65,12 @@ if(APPLE)
         MACOSX_BUNDLE_BUNDLE_VERSION "1"
         MACOSX_BUNDLE_INFO_STRING "DnD HP Tracker"
         MACOSX_BUNDLE_COPYRIGHT ""
+        MACOSX_BUNDLE_ICON_FILE "hptracker.icns"
     )
+    # The app icon (macos/icon/hptracker.icns) goes into the bundle's Resources.
+    set(APP_ICNS ${CMAKE_SOURCE_DIR}/macos/icon/hptracker.icns)
+    set_source_files_properties(${APP_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(hp_tracker_gui PRIVATE ${APP_ICNS})
     # High-DPI rendering on Retina.
     set(MACOSX_BUNDLE_HIGH_RESOLUTION_CAPABLE TRUE)
 

@@ -429,5 +429,8 @@ writes screenshots to `build/ui_test/`.
 | `package_mac.sh` | Builds the shareable app bundle and zip |
 | `tools/ui_test/` | Scripted end-to-end UI tests |
 | `windows/` | Windows build: script, compiler settings, and the read-me shipped in the zip |
+| `macos/icon/` | The Mac app icon (`hptracker.icns`), generated |
+| `hptracker_icon.png` | Source artwork for the app icons |
+| `tools/make_icons.py` | Regenerates the Mac and Windows icons from `hptracker_icon.png` |
 | `archive/` | Earlier versions kept for reference (the previous bright "neo-brutalist" theme, an old `encounter.cpp`) |
 | `docs/` | README screenshot |
