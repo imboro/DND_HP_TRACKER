@@ -85,6 +85,10 @@ static bool operator==(CardRef a, CardRef b) { return a.side == b.side && a.inde
 // What a floating label / flash represents.
 enum class FxKind { Damage, Heal, Temp, Immune };
 
+// Card animation timings (seconds).
+static const float DEATH_LEN = 1.4f;   // death: thud, cross, strike-through, floating label
+static const float SPAWN_TIME = 0.32f; // fade-in + drop when a card is added
+
 struct CardState {
     ImVec2 pos = ImVec2(0, 0);      // top-left inside the board
     ImVec2 drawPos = ImVec2(0, 0);  // on-screen top-left last frame (after shake)
@@ -115,6 +119,14 @@ struct CardState {
     bool wantsEdit = false;
     bool pressed = false;   // drag handle went down this frame
     bool clicked = false;   // released without moving
+
+    // Death, appearance, selection and hover animations.
+    bool wasDead = false;         // looked dead last frame (a new death starts the animation)
+    float deathT = DEATH_LEN;     // seconds since it died (DEATH_LEN = finished)
+    std::string deathLabel;       // "DEFEATED" / "DEAD", floated up when it dies
+    float spawnT = SPAWN_TIME;    // seconds since the user added it (negative = staggered wait)
+    float selAnim = 0.0f;         // selection ring, 0..1
+    float lift = 4.0f;            // shadow offset, eased between rest / hover / held / dead
 };
 
 struct BoardState {
@@ -291,6 +303,18 @@ static bool loadSystemFonts(float pixelSize) {
 }
 
 // ---- Drawing helpers -------------------------------------------------------
+
+static float clamp01(float v) { return std::clamp(v, 0.0f, 1.0f); }
+static float lerpf(float a, float b, float t) { return a + (b - a) * t; }
+static float easeOutCubic(float t) { float u = 1.0f - t; return 1.0f - u * u * u; }
+static float easeInOutCubic(float t) {
+    return t < 0.5f ? 4 * t * t * t : 1.0f - std::pow(-2 * t + 2, 3.0f) / 2.0f;
+}
+
+// Moves `value` toward `target`, framerate-independent (higher rate = snappier).
+static float approach(float value, float target, float rate, float dt) {
+    return value + (target - value) * (1.0f - std::exp(-rate * dt));
+}
 
 static ImU32 withAlpha(ImU32 c, int alpha) {
     return (c & 0x00FFFFFF) | (static_cast<ImU32>(std::clamp(alpha, 0, 255)) << 24);
@@ -530,6 +554,11 @@ static void segmentedTabs(const char* const* labels, int count, int* active, flo
     const float inset = 4 * S;
     inkBox(dl, p0, p0 + ImVec2(w, h), h * 0.5f, S);
     const float segW = (w - inset * 2) / static_cast<float>(count);
+    // Where the pill is, in tabs (eased toward the active one between frames).
+    static std::unordered_map<ImGuiID, float> pillPos;
+    const ImGuiID key = ImGui::GetID("##segpill");
+    auto found = pillPos.find(key);
+    float& pill = found != pillPos.end() ? found->second : (pillPos[key] = static_cast<float>(*active));
     for (int i = 0; i < count; i++) {
         const ImVec2 a(p0.x + inset + segW * static_cast<float>(i), p0.y + inset);
         const ImVec2 b(a.x + segW, p0.y + h - inset);
@@ -538,11 +567,22 @@ static void segmentedTabs(const char* const* labels, int count, int* active, flo
         if (ImGui::InvisibleButton("seg", b - a)) *active = i;
         const bool hovered = ImGui::IsItemHovered();
         ImGui::PopID();
-        const bool on = *active == i;
-        if (on) dl->AddRectFilled(a, b, COL_INK, (b.y - a.y) * 0.5f);
-        else if (hovered) dl->AddRectFilled(a, b, COL_RAISED_HI, (b.y - a.y) * 0.5f);
+        if (hovered && *active != i) dl->AddRectFilled(a, b, COL_RAISED_HI, (b.y - a.y) * 0.5f);
+    }
+    pill = approach(pill, static_cast<float>(*active), 16.0f, ImGui::GetIO().DeltaTime);
+    if (std::fabs(pill - static_cast<float>(*active)) < 0.002f) pill = static_cast<float>(*active);
+    {
+        const ImVec2 a(p0.x + inset + segW * pill, p0.y + inset);
+        dl->AddRectFilled(a, ImVec2(a.x + segW, p0.y + h - inset), COL_INK, (h - inset * 2) * 0.5f);
+    }
+    for (int i = 0; i < count; i++) {
+        const ImVec2 a(p0.x + inset + segW * static_cast<float>(i), p0.y + inset);
+        const ImVec2 b(a.x + segW, p0.y + h - inset);
+        // Labels turn white as the pill slides under them.
+        const float under = clamp01(1.0f - std::fabs(pill - static_cast<float>(i)));
         const ImVec2 ts = boldTextSize(labels[i]);
-        boldText(dl, ImVec2((a.x + b.x - ts.x) * 0.5f, (a.y + b.y - ts.y) * 0.5f), on ? COL_WHITE : COL_MUTED, labels[i]);
+        boldText(dl, ImVec2((a.x + b.x - ts.x) * 0.5f, (a.y + b.y - ts.y) * 0.5f),
+                 mixColor(COL_MUTED, COL_WHITE, under), labels[i]);
     }
     ImGui::SetCursorScreenPos(p0);
     ImGui::Dummy(ImVec2(w, h + 3 * S));
@@ -566,6 +606,31 @@ static void drawBolt(ImDrawList* dl, ImVec2 o, float s, float thick, ImU32 col) 
 static void drawCross(ImDrawList* dl, ImVec2 o, float s, float thick, ImU32 col) {
     dl->AddLine(ImVec2(o.x + 0.25f * s, o.y + 0.25f * s), ImVec2(o.x + 0.75f * s, o.y + 0.75f * s), col, thick);
     dl->AddLine(ImVec2(o.x + 0.75f * s, o.y + 0.25f * s), ImVec2(o.x + 0.25f * s, o.y + 0.75f * s), col, thick);
+}
+
+// The cross drawn stroke by stroke: each stroke grows from 0 to 1.
+static void drawCrossPartial(ImDrawList* dl, ImVec2 o, float s, float thick, ImU32 col, float t1, float t2) {
+    auto stroke = [&](float x0, float y0, float x1, float y1, float t) {
+        if (t <= 0.0f) return;
+        const ImVec2 a(o.x + x0 * s, o.y + y0 * s);
+        dl->AddLine(a, ImVec2(a.x + (x1 - x0) * s * t, a.y + (y1 - y0) * s * t), col, thick);
+    };
+    stroke(0.25f, 0.25f, 0.75f, 0.75f, std::min(t1, 1.0f));
+    stroke(0.75f, 0.25f, 0.25f, 0.75f, std::min(t2, 1.0f));
+}
+
+// Fades in (k: 0 -> 1) and shifts every vertex added to `dl` since index
+// `start`: a cheap way to animate a whole group of shapes and widgets at once.
+// Colors blend toward the background behind the group instead of becoming
+// transparent, so stacked layers (a box over its hard shadow) don't turn gray.
+static void fadeVertices(ImDrawList* dl, int start, float k, ImU32 background, ImVec2 shift = ImVec2(0, 0)) {
+    const float hide = 1.0f - std::clamp(k, 0.0f, 1.0f);
+    for (int i = start; i < dl->VtxBuffer.Size; i++) {
+        ImDrawVert& v = dl->VtxBuffer[i];
+        v.col = mixColor(v.col, background, hide);
+        v.pos.x += shift.x;
+        v.pos.y += shift.y;
+    }
 }
 
 // Two arrows chasing each other round a circle (rounds).
@@ -605,9 +670,20 @@ static bool statTile(const char* id, const char* label, const std::string& value
         case TileIcon::Bolt:  drawBolt(dl, io, is, 2.0f * S, iconCol); break;
         case TileIcon::Heart: drawHeart(dl, io, is, 2.0f * S, iconCol); break;
     }
-    const float mul = value.size() > 4 ? 1.15f : 1.45f;
+    // The number pops (grows, then settles) whenever it changes.
+    static std::unordered_map<ImGuiID, std::pair<std::string, double>> lastValue;
+    const ImGuiID key = ImGui::GetID(id);
+    const double now = ImGui::GetTime();
+    auto seen = lastValue.find(key);
+    if (seen == lastValue.end()) seen = lastValue.emplace(key, std::make_pair(value, -10.0)).first;
+    else if (seen->second.first != value) seen->second = std::make_pair(value, now);
+    const float popT = clamp01(static_cast<float>(now - seen->second.second) / 0.35f);
+    const float pop = 1.0f + 0.32f * (1.0f - popT) * (1.0f - popT);
+    const float baseMul = value.size() > 4 ? 1.15f : 1.45f;
+    const float mul = baseMul * pop;
+    const ImVec2 vs0 = heavyTextSize(value.c_str(), baseMul);
     const ImVec2 vs = heavyTextSize(value.c_str(), mul);
-    heavyText(dl, ImVec2(p0.x + w - 10 * S - vs.x, p0.y + 7 * S), COL_TEXT, value.c_str(), mul);
+    heavyText(dl, ImVec2(p0.x + w - 10 * S - vs.x, p0.y + 7 * S + (vs0.y - vs.y) * 0.5f), COL_TEXT, value.c_str(), mul);
     const ImVec2 ls = boldTextSize(label, 0.92f);
     boldText(dl, ImVec2(p0.x + 10 * S, p0.y + h - 9 * S - ls.y), COL_TEXT, label, 0.92f);
     ImGui::InvisibleButton(id, ImVec2(w, h + 4 * S));
@@ -644,13 +720,6 @@ static const float ANIM_EXTEND = 0.18f;    // pre-bar extends
 static const float ANIM_HOLD = 0.55f;      // then holds until here
 static const float ANIM_DROP = 0.45f;      // then the main bar drops/rises
 static const float ANIM_TOTAL = ANIM_HOLD + ANIM_DROP + 0.1f;
-
-static float clamp01(float v) { return std::clamp(v, 0.0f, 1.0f); }
-static float lerpf(float a, float b, float t) { return a + (b - a) * t; }
-static float easeOutCubic(float t) { float u = 1.0f - t; return 1.0f - u * u * u; }
-static float easeInOutCubic(float t) {
-    return t < 0.5f ? 4 * t * t * t : 1.0f - std::pow(-2 * t + 2, 3.0f) / 2.0f;
-}
 
 // What the bar should look like right now, as fractions of max HP.
 struct BarVis {
@@ -752,9 +821,32 @@ static void outlinedText(ImDrawList* dl, ImVec2 pos, ImU32 col, int alpha, const
 
 // Floating label and crit starburst; drawn in a top pass above all cards.
 static void drawCardEffects(const CardState& st, ImVec2 size, float S) {
-    if (!st.active) return;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 p = st.drawPos;
+
+    // Death: an ink shockwave ring around the card, then "DEFEATED" / "DEAD" floats up.
+    if (st.wasDead && st.deathT < DEATH_LEN) {
+        const float d = st.deathT;
+        if (d < 0.5f) {
+            const float u = d / 0.5f;
+            const float grow = easeOutCubic(u) * 26.0f * S;
+            dl->AddRect(ImVec2(p.x - grow, p.y - grow), ImVec2(p.x + size.x + grow, p.y + size.y + grow),
+                        withAlpha(COL_INK, static_cast<int>(150 * (1.0f - u))), 16 * S + grow, 0, (3.0f - 2.0f * u) * S);
+        }
+        const float start = 0.15f;
+        if (d > start && !st.deathLabel.empty()) {
+            const float u = clamp01((d - start) / (DEATH_LEN - start));
+            const float rise = easeOutCubic(u) * 30.0f * S;
+            const float fade = u < 0.6f ? 1.0f : 1.0f - (u - 0.6f) / 0.4f;
+            const float pop = u < 0.1f ? lerpf(0.6f, 1.0f, easeOutCubic(u / 0.1f)) : 1.0f;
+            const float mul = 1.35f * pop;
+            const ImVec2 ts = heavyTextSize(st.deathLabel.c_str(), mul);
+            const ImVec2 pos(p.x + size.x * 0.5f - ts.x * 0.5f, p.y - 6 * S - rise - ts.y * 0.5f);
+            outlinedText(dl, pos, IM_COL32(205, 205, 200, 255), static_cast<int>(255 * fade), st.deathLabel.c_str(), mul, S);
+        }
+    }
+
+    if (!st.active) return;
     const float t = st.t;
 
     // Floating "-N" / "+N" / "IMMUNE" / "-5 temp".
@@ -951,6 +1043,7 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     ImGui::PushID(static_cast<int>(side) * 10000 + ref.index);
     std::optional<CardFontScope> cardFont;
     cardFont.emplace();
+    const int vtxStart = dl->VtxBuffer.Size;  // everything this card draws (for the fade-in)
 
     ImVec2& pos = st.pos;
     st.beingDragged = false;
@@ -959,43 +1052,72 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     st.clicked = false;
 
     // HP-change animation bookkeeping.
-    updateCardFx(st, c.getCurrentHp(), c.getMaxHp(), std::min(ImGui::GetIO().DeltaTime, 0.05f));
+    const float dt = std::min(ImGui::GetIO().DeltaTime, 0.05f);
+    updateCardFx(st, c.getCurrentHp(), c.getMaxHp(), dt);
+
+    // A card only looks dead once its final hit has finished dropping; then
+    // the death animation plays once (cards loaded already dead skip it).
+    const Life life = lifeOf(side, c);
+    const bool showDead = life == Life::Dead &&
+                          !(st.active && st.fxKind == FxKind::Damage && st.t < ANIM_HOLD + ANIM_DROP);
+    if (showDead && !st.wasDead) {
+        st.deathT = 0.0f;
+        st.deathLabel = side == Side::Players ? "DEAD" : "DEFEATED";
+    }
+    st.wasDead = showDead;
+    if (st.deathT < DEATH_LEN) st.deathT += dt;
+    if (st.spawnT < SPAWN_TIME) st.spawnT += dt;
+    // 0 = alive look, 1 = fully dead look (fades in over half a second).
+    const float deadK = showDead ? easeOutCubic(clamp01(st.deathT / 0.55f)) : 0.0f;
+    const float spawnK = easeOutCubic(clamp01(st.spawnT / SPAWN_TIME));
 
     // Keep the card (including its tab and shadow) inside the board.
     pos.x = std::clamp(pos.x, 0.0f, std::max(0.0f, boardSize.x - size.x - shadow));
     pos.y = std::clamp(pos.y, tabH, std::max(tabH, boardSize.y - size.y - shadow));
     const ImVec2 shake = shakeOffset(st, S);
-    const ImVec2 p(boardOrigin.x + pos.x + shake.x, boardOrigin.y + pos.y + shake.y);
+    // Dying thuds the card down a few pixels before it settles; new cards drop in from above.
+    float thud = 0.0f;
+    if (showDead && st.deathT < 0.4f) {
+        const float u = st.deathT / 0.4f;
+        thud = std::sin(u * 3.14159265f) * 7.0f * S * (1.0f - 0.5f * u);
+    }
+    const float drop = (1.0f - spawnK) * -16.0f * S;
+    const ImVec2 p(boardOrigin.x + pos.x + shake.x, boardOrigin.y + pos.y + shake.y + thud + drop);
     const ImVec2 pEnd(p.x + size.x, p.y + size.y);
     st.drawPos = p;
 
-    // A card only looks dead once its final hit has finished dropping.
-    const Life life = lifeOf(side, c);
-    const bool showDead = life == Life::Dead &&
-                          !(st.active && st.fxKind == FxKind::Damage && st.t < ANIM_HOLD + ANIM_DROP);
-    const ImU32 accent = showDead ? COL_GRAY : (side == Side::Players ? COL_PLAYER : COL_RED);
+    const ImU32 sideColor = side == Side::Players ? COL_PLAYER : COL_RED;
+    const ImU32 accent = mixColor(sideColor, COL_GRAY, deadK);
 
     // Hover state of the drag handle is known from the previous frame via the
     // item ID, so the fill can react without submitting the handle first.
     const ImGuiID dragId = ImGui::GetID("drag");
     const bool hoveredOrActive = ImGui::GetHoveredID() == dragId || ImGui::GetActiveID() == dragId;
 
-    // Selection ring: a marker-yellow outline around the card.
-    if (st.selected) {
-        const float g = 5 * S;
-        dl->AddRectFilled(p - ImVec2(g, g), pEnd + ImVec2(g + 4 * S, g + 5 * S), withAlpha(COL_SELECT, 40), round + g);
-        dl->AddRect(p - ImVec2(g, g), pEnd + ImVec2(g + 4 * S, g + 5 * S), COL_SELECT, round + g, 0, 3.0f * S);
+    // Selection ring: a marker-yellow outline that grows out from the card.
+    st.selAnim = approach(st.selAnim, st.selected ? 1.0f : 0.0f, 20.0f, dt);
+    if (st.selAnim > 0.01f) {
+        const float e = easeOutCubic(st.selAnim);
+        const float g = lerpf(0.0f, 5.0f, e) * S;
+        const ImVec2 r0 = p - ImVec2(g, g), r1 = pEnd + ImVec2(g + 4 * S, g + 5 * S);
+        dl->AddRectFilled(r0, r1, withAlpha(COL_SELECT, static_cast<int>(40 * e)), round + g);
+        dl->AddRect(r0, r1, withAlpha(COL_SELECT, static_cast<int>(255 * e)), round + g, 0, 3.0f * S);
     }
 
-    // Hard ink shadow (lifted further while held), body, outline.
+    // Hard ink shadow: rises on hover, more while held, flattens when dead.
     const bool held = ImGui::GetActiveID() == dragId;
-    const float lift = held ? 7.0f : 4.0f;
-    const ImU32 outlineCol = showDead ? COL_BORDER_HI : COL_INK;
+    const float liftTarget = lerpf(held ? 7.0f : (hoveredOrActive ? 5.5f : 4.0f), 1.5f, deadK);
+    st.lift = approach(st.lift, liftTarget, 18.0f, dt);
+    const float lift = st.lift;
+    const ImU32 outlineCol = mixColor(COL_INK, COL_BORDER_HI, deadK);
     dl->AddRectFilled(p + ImVec2(lift * S, (lift + 1) * S), pEnd + ImVec2(lift * S, (lift + 1) * S), outlineCol, round);
-    ImU32 body = COL_CARD;
-    if (showDead) body = IM_COL32(241, 241, 238, 255);
-    else if (life == Life::Dying) body = IM_COL32(255, 241, 239, 255);
-    else if (hoveredOrActive) body = COL_CARD_HI;
+    // Body: dying players pulse faintly like a heartbeat; the dead fade to gray.
+    ImU32 aliveBody = hoveredOrActive ? COL_CARD_HI : COL_CARD;
+    if (life == Life::Dying || (showDead && side == Side::Players)) {
+        const float beat = life == Life::Dying ? 0.5f + 0.5f * std::sin(time * 4.0f) : 0.5f;
+        aliveBody = mixColor(IM_COL32(255, 244, 242, 255), IM_COL32(255, 228, 224, 255), beat);
+    }
+    const ImU32 body = mixColor(aliveBody, IM_COL32(241, 241, 238, 255), deadK);
     dl->AddRectFilled(p, pEnd, body, round);
     // Flash on impact, colored by what happened (stronger on a crit).
     if (st.active) {
@@ -1018,12 +1140,15 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, 30), 11 * S);
     const ImVec2 glyphOrigin(iconMin.x + iconSize * 0.15f, iconMin.y + iconSize * 0.15f);
     const float glyphSize = iconSize * 0.7f;
+    // On death the heart/bolt fades out while a cross is drawn over it stroke by stroke.
+    const float oldGlyph = showDead ? 1.0f - clamp01(st.deathT / 0.2f) : 1.0f;
+    if (oldGlyph > 0.0f) {
+        if (side == Side::Players) drawHeart(dl, glyphOrigin, glyphSize, 2.4f * S, fadeAlpha(accent, oldGlyph));
+        else drawBolt(dl, glyphOrigin, glyphSize, 2.4f * S, fadeAlpha(accent, oldGlyph));
+    }
     if (showDead) {
-        drawCross(dl, glyphOrigin, glyphSize, 2.4f * S, accent);
-    } else if (side == Side::Players) {
-        drawHeart(dl, glyphOrigin, glyphSize, 2.4f * S, accent);
-    } else {
-        drawBolt(dl, glyphOrigin, glyphSize, 2.4f * S, accent);
+        drawCrossPartial(dl, glyphOrigin, glyphSize, 2.4f * S, accent, easeOutCubic(clamp01(st.deathT / 0.16f)),
+                         easeOutCubic(clamp01((st.deathT - 0.14f) / 0.16f)));
     }
 
     // Quick stats next to the icon: HP (+temp), then AC / speed / passive perception.
@@ -1033,7 +1158,7 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
         const std::string cur = std::to_string(c.getCurrentHp());
         const std::string rest = " / " + std::to_string(c.getMaxHp()) + " HP";
         const ImVec2 cs = heavyTextSize(cur.c_str());
-        heavyText(dl, statsPos, showDead ? COL_MUTED : COL_TEXT, cur.c_str());
+        heavyText(dl, statsPos, mixColor(COL_TEXT, COL_MUTED, deadK), cur.c_str());
         const float restX = statsPos.x + cs.x;
         dl->AddText(ImVec2(restX, statsPos.y), COL_MUTED, rest.c_str());
         if (c.getTempHp() > 0) {
@@ -1051,12 +1176,17 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     const float nameDraw = 1.08f;  // the heavy face runs wide; slightly smaller than the slot
     const ImVec2 namePos(p.x + pad, iconMax.y + 6 * S);
     dl->PushClipRect(ImVec2(p.x, p.y), ImVec2(pEnd.x - (c.getCurrentHp() == 0 && side == Side::Players ? 105 * S : pad), pEnd.y), true);
-    heavyText(dl, namePos + ImVec2(0, 1 * S), showDead ? COL_MUTED : COL_TEXT, name.c_str(), nameDraw);
+    heavyText(dl, namePos + ImVec2(0, 1 * S), mixColor(COL_TEXT, COL_MUTED, deadK), name.c_str(), nameDraw);
     dl->PopClipRect();
     if (showDead) {
+        // The strike-through is drawn left to right, just after the cross.
+        const float strike = easeOutCubic(clamp01((st.deathT - 0.25f) / 0.3f));
         const ImVec2 ns = heavyTextSize(name.c_str(), nameDraw);
         const float y = namePos.y + 1 * S + ns.y * 0.55f;
-        dl->AddLine(ImVec2(namePos.x, y), ImVec2(std::min(namePos.x + ns.x, pEnd.x - pad), y), COL_MUTED, 1.5f * S);
+        const float x1 = std::min(namePos.x + ns.x, pEnd.x - pad);
+        if (strike > 0.0f) {
+            dl->AddLine(ImVec2(namePos.x, y), ImVec2(lerpf(namePos.x, x1, strike), y), COL_MUTED, 1.5f * S);
+        }
     }
 
     // HP bar: a pill with an ink outline; temp HP as a blue strip below.
@@ -1186,6 +1316,9 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
         }
     }
 
+    // Newly added cards fade in (together with their drop from above).
+    if (spawnK < 1.0f) fadeVertices(dl, vtxStart, spawnK, COL_BOARD);
+
     cardFont.reset();  // tooltips use the normal UI size
     if (showTooltip) cardTooltip(side, c);
     ImGui::PopID();
@@ -1197,6 +1330,7 @@ static CardRef addCombatant(Encounter& encounter, BoardState& board, Side side, 
     CardState st;
     st.pos = pos;
     st.lastHp = c.getCurrentHp();
+    st.wasDead = lifeOf(side, c) == Life::Dead;  // already dead (load/undo): no death animation
     std::vector<CardState>& list = board.of(side);
     list.push_back(st);
     const CardRef ref{side, static_cast<int>(list.size()) - 1};
@@ -1994,6 +2128,7 @@ int main(int, char**) {
             c.rename(makeNumberedNames(encounter, c.getName(), 1)[0]);
             const CardRef nr = addCombatant(encounter, board, copies[i].first, c, spawnPos());
             board.get(nr).selected = true;
+            board.get(nr).spawnT = -0.06f * static_cast<float>(i);  // staggered fade-in
             addLog("Added " + c.getName(), COL_MUTED);
         }
     };
@@ -2009,11 +2144,12 @@ int main(int, char**) {
         pushUndo();
         const std::vector<std::string> names = makeNumberedNames(encounter, t.name, count);
         clearSelection();
-        for (const std::string& n : names) {
+        for (size_t i = 0; i < names.size(); i++) {
             Creature c = creatureFromTemplate(t);
-            c.rename(n);
+            c.rename(names[i]);
             const CardRef r = addCombatant(encounter, board, side, c, spawnPos());
             board.get(r).selected = true;
+            board.get(r).spawnT = -0.06f * static_cast<float>(i);  // staggered fade-in
         }
         addLog("Added " + std::to_string(count) + " x " + t.name, COL_MUTED);
     };
@@ -2047,6 +2183,9 @@ int main(int, char**) {
     int selCondition = 10;  // Poisoned
     int selRounds = 0;
     int activeTab = 0;      // 0 Combat, 1 Add, 2 Log
+    int shownTab = 0;       // tab the content animation last started for
+    double tabSwitchTime = -10.0;
+    float tabSlideDir = 1.0f;  // +1: new content comes from the right, -1: from the left
 
     bool running = true;
     while (running) {
@@ -2197,6 +2336,19 @@ int main(int, char**) {
         static const char* const TAB_LABELS[] = {"Combat", "Add", "Log"};
         segmentedTabs(TAB_LABELS, 3, &activeTab, S);
         ImGui::Dummy(ImVec2(0, 2 * S));
+        // Switching tabs slides the new content in from the side of its tab while it fades in.
+        if (activeTab != shownTab) {
+            tabSlideDir = activeTab > shownTab ? 1.0f : -1.0f;
+            shownTab = activeTab;
+            tabSwitchTime = ImGui::GetTime();
+        }
+        const float tabK = easeOutCubic(clamp01(static_cast<float>(ImGui::GetTime() - tabSwitchTime) / 0.24f));
+        // Applied to a tab body window just before it ends (covers everything it drew).
+        auto tabBodyFx = [&]() {
+            if (tabK < 1.0f) {
+                fadeVertices(ImGui::GetWindowDrawList(), 0, tabK, COL_PANEL, ImVec2((1.0f - tabK) * 22 * S * tabSlideDir, 0));
+            }
+        };
         {
             // ================= Combat tab =================
             if (activeTab == 0) {
@@ -2365,6 +2517,7 @@ int main(int, char**) {
                     ImGui::TextDisabled("%s", statusMsg.empty() ? "Autosaves while you play." : statusMsg.c_str());
                 }
                 endSection();
+                tabBodyFx();
                 ImGui::EndChild();
             }
 
@@ -2401,13 +2554,15 @@ int main(int, char**) {
                     pushUndo();
                     const Side side = newSide == 0 ? Side::Players : Side::Creatures;
                     clearSelection();
-                    for (const std::string& n : makeNumberedNames(encounter, newName, newCount)) {
-                        Creature c(n, newMaxHp);
+                    const std::vector<std::string> names = makeNumberedNames(encounter, newName, newCount);
+                    for (size_t i = 0; i < names.size(); i++) {
+                        Creature c(names[i], newMaxHp);
                         c.setAc(newAc);
                         if (side == Side::Players) c.setLevel(newLevel);
                         else c.setCrIndex(newCr);
                         const CardRef r = addCombatant(encounter, board, side, c, spawnPos());
                         board.get(r).selected = true;
+                        board.get(r).spawnT = -0.06f * static_cast<float>(i);  // staggered fade-in
                     }
                     addLog("Added " + std::to_string(newCount) + " x " + newName, COL_MUTED);
                     newName[0] = '\0';
@@ -2477,11 +2632,13 @@ int main(int, char**) {
                     saveLibrary();
                 }
                 endSection();
+                tabBodyFx();
                 ImGui::EndChild();
             }
 
             // ================= Log tab =================
             if (activeTab == 2) {
+                ImGui::BeginChild("LogTab", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
                 beginSection("Combat log", std::to_string(log.size()));
                 const float w2 = rowButtonWidth(2);
                 if (quietButton("Copy log", ImVec2(w2, 0))) {
@@ -2511,8 +2668,11 @@ int main(int, char**) {
                     ImGui::SetScrollHereY(1.0f);
                     logScrollToBottom = false;
                 }
+                tabBodyFx();  // the log list is its own window
                 ImGui::EndChild();
                 endSection();
+                tabBodyFx();
+                ImGui::EndChild();
             }
         }
         ImGui::EndChild();

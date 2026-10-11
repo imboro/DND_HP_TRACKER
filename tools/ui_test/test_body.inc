@@ -138,7 +138,8 @@
                 act(2, [&]() { check(exists("Orc 1") && exists("Orc 2") && !exists("Orc"), "Cmd+D: Orc renamed Orc 1, copy is Orc 2"); check(C("Orc 2")->getCurrentHp() == 15 && C("Orc 2")->getConditions().empty(), "duplicate starts fresh (full HP, no conditions)"); });
                 // 12) Add 3 goblins from the library
                 act(2, [&]() { addFromTemplate(defaultLibrary()[1], Side::Creatures, 3); });
-                act(2, [&]() { check(exists("Goblin 1") && exists("Goblin 4") && !exists("Goblin"), "library x3: Goblin 2..4 added, Goblin renamed Goblin 1"); });
+                act(2, [&]() { check(exists("Goblin 1") && exists("Goblin 4") && !exists("Goblin"), "library x3: Goblin 2..4 added, Goblin renamed Goblin 1");
+                               check(board.get(findRef("Goblin 4")).spawnT < SPAWN_TIME, "new cards fade in (staggered)"); });
                 // 13) Edit via double-click
                 act(2, [&]() { ImVec2 p = bodyPt("Hero"); motion(p.x, p.y); button(true, p.x, p.y); });
                 act(1, [&]() { ImVec2 p = bodyPt("Hero"); button(false, p.x, p.y); });
@@ -178,12 +179,28 @@
                     bool inside = true; for (auto& p : ps) if (p.y + cs.y > g_boardSize.y + 1 || p.x + cs.x > g_boardSize.x + 1) inside = false;
                     check(!overlap && inside, "Tidy board: no overlaps, all inside (card size " + std::to_string((int)std::lround(g_cardScale * 100)) + "%)");
                     g_shot = "09_tidy"; });
-                // 17) Tabs
+                // 17) Tabs (the content slides in, so shots wait for it to settle)
                 act(3, [&]() { g_forceTab = 1; });
-                act(3, [&]() { g_shot = "07_add"; });
+                act(4, [&]() { g_shot = "12_tab_sliding"; });
+                act(25, [&]() { g_shot = "07_add"; });
                 act(2, [&]() { g_forceTab = 2; });
-                act(3, [&]() { g_shot = "08_log"; });
+                act(25, [&]() { g_shot = "08_log"; });
                 act(2, [&]() { g_forceTab = 0; });
+                act(25, [&]() {});
+                // 17b) Death animation: plays once after the HP bar has drained, then stays dead
+                act(2, [&]() { CardRef r = findRef("Goblin 2"); pushUndo(); applyHit(r, 50); });
+                waitSeconds(1.08);
+                act(1, [&]() { CardState& st = board.get(findRef("Goblin 2")); check(st.wasDead && st.deathT < 0.3f, "death animation starts once the bar has drained (t " + std::to_string(st.deathT) + ")"); g_shot = "11_death_a"; });
+                waitSeconds(0.25);
+                act(1, [&]() { g_shot = "11_death_b"; });
+                waitSeconds(0.6);
+                act(1, [&]() { g_shot = "11_death_c"; });
+                waitSeconds(0.8);
+                act(1, [&]() { CardState& st = board.get(findRef("Goblin 2")); check(st.deathT >= DEATH_LEN, "death animation finishes and stays dead"); });
+                cmdKey(SDLK_z, SDL_SCANCODE_Z);  // undo the kill
+                act(2, [&]() { check(C("Goblin 2")->getCurrentHp() > 0, "undo brings Goblin 2 back"); });
+                cmdKey(SDLK_y, SDL_SCANCODE_Y);  // redo it
+                act(2, [&]() { CardState& st = board.get(findRef("Goblin 2")); check(C("Goblin 2")->getCurrentHp() == 0 && st.wasDead && st.deathT >= DEATH_LEN, "redo shows it dead without replaying the animation"); });
                 // 18) Alerts fade out on their own
                 act(2, [&]() { addAlert("Fade test", COL_AMBER); });
                 waitSeconds(3.0);
