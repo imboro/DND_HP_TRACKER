@@ -123,11 +123,17 @@
                 act(3, [&]() {});
                 clickAt([=]() { return rectCenter("End round"); });
                 act(2, [&]() { g_scrollTo.clear(); g_shot = "04b_toasts"; });
-                // clicking where the toasts are must not dismiss them (they only fade)
-                act(1, [&]() { std::printf("  alerts on screen: %zu\n", alerts.size()); });
-                clickAt([=]() { return ImVec2(g_boardOrigin.x + g_boardSize.x - 22 * s - 170 * s, g_boardOrigin.y + 16 * s + 14 * s); });
-                act(1, [&]() { check(alertHas("Orc: Poisoned ended"), "clicking a toast does not dismiss it"); });
                 act(2, [&]() { check(board.round == 2 && !C("Orc")->hasCondition("Poisoned") && C("Orc")->hasCondition("Prone") && alertHas("Orc: Poisoned ended"), "End round: round 2, Poisoned expired with alert, Prone stays"); });
+                // clicking a toast fades it away quickly, without reaching the cards under it
+                static std::string clickedText;
+                static size_t selBefore = 0;
+                act(1, [&]() { clickedText = alerts.empty() ? "" : alerts.front().text; selBefore = selectedRefs().size();
+                               std::printf("  alerts on screen: %zu, clicking \"%s\"\n", alerts.size(), clickedText.c_str()); });
+                clickAt([&]() { const Alert& a = alerts.front(); return ImVec2((a.rectMin.x + a.rectMax.x) / 2, (a.rectMin.y + a.rectMax.y) / 2); });
+                act(1, [&]() { const Alert* a = alertNamed(clickedText); check(a && a->clicked >= 0.0, "clicking a toast starts its fade");
+                               check(selectedRefs().size() == selBefore, "the click doesn't reach the cards under the toast"); });
+                waitSeconds(0.5);
+                act(1, [&]() { check(!alertNamed(clickedText), "a clicked toast is gone after a quick fade"); });
                 // 10) Resistance halves damage
                 setAmount(9);
                 clickAt([=]() { return dmgPt("Orc"); });
@@ -203,12 +209,12 @@
                 act(2, [&]() { CardState& st = board.get(findRef("Goblin 2")); check(C("Goblin 2")->getCurrentHp() == 0 && st.wasDead && st.deathT >= DEATH_LEN, "redo shows it dead without replaying the animation"); });
                 // 18) Alerts fade out on their own
                 act(2, [&]() { addAlert("Fade test", COL_AMBER); });
-                waitSeconds(3.0);
-                act(1, [&]() { const Alert* a = alertNamed("Fade test"); check(a && alertOpacity(*a, ImGui::GetTime()) == 1.0f, "alert fully visible after 3 s"); });
-                waitSeconds(3.9);
-                act(1, [&]() { const Alert* a = alertNamed("Fade test"); const float o = a ? alertOpacity(*a, ImGui::GetTime()) : -1.0f;
-                               check(a && o > 0.0f && o < 1.0f, "alert is fading after ~7 s (opacity " + std::to_string(o) + ")"); g_shot = "10_fading"; });
                 waitSeconds(1.5);
+                act(1, [&]() { const Alert* a = alertNamed("Fade test"); check(a && alertOpacity(*a, ImGui::GetTime()) == 1.0f, "alert fully visible after 1.5 s"); });
+                waitSeconds(2.4);
+                act(1, [&]() { const Alert* a = alertNamed("Fade test"); const float o = a ? alertOpacity(*a, ImGui::GetTime()) : -1.0f;
+                               check(a && o > 0.0f && o < 1.0f, "alert is fading after ~4 s (opacity " + std::to_string(o) + ")"); g_shot = "10_fading"; });
+                waitSeconds(1.2);
                 act(1, [&]() { check(!alertHas("Fade test"), "alert gone after the fade"); });
                 act(3, [&]() { g_forceTab = -1; std::printf("%s: %d failure(s)\n", fails ? "DONE WITH FAILURES" : "ALL UI CHECKS PASSED", fails); running = false; });
             }

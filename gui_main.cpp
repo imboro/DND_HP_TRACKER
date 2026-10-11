@@ -41,8 +41,10 @@ static const char* const MOD_KEY = "Ctrl";
 #endif
 
 // Alerts stay fully visible this long, then fade out over ALERT_FADE seconds.
-static const double ALERT_HOLD = 6.0;
+// Clicking one fades it out early, over ALERT_CLICK_FADE seconds.
+static const double ALERT_HOLD = 3.0;
 static const double ALERT_FADE = 1.6;
+static const double ALERT_CLICK_FADE = 0.35;
 
 // Bold and heavy faces for headings and numbers (fall back to the regular font).
 static ImFont* g_fontBold = nullptr;
@@ -1759,23 +1761,29 @@ struct LogEntry {
 struct Alert {
     std::string text;
     ImU32 color;
-    double born;     // ImGui time when raised (slide-in and fade-out)
-    float y = -1.0f; // animated top offset in the stack (-1 = not placed yet)
+    double born;             // ImGui time when raised (slide-in and fade-out)
+    float y = -1.0f;         // animated top offset in the stack (-1 = not placed yet)
+    double clicked = -1.0;   // ImGui time it was clicked away (-1 = not clicked)
+    ImVec2 rectMin, rectMax; // where it was drawn last frame (for clicks)
+    bool hot = false;        // under the mouse this frame
 };
 
-// 0..1 opacity: fully visible for ALERT_HOLD seconds, then fading out.
+// 0..1 opacity: fully visible for ALERT_HOLD seconds, then fading out;
+// a click starts a quick fade right away.
 static float alertOpacity(const Alert& al, double now) {
+    double k = 1.0;
     const double age = now - al.born;
-    if (age <= ALERT_HOLD) return 1.0f;
-    return static_cast<float>(std::clamp(1.0 - (age - ALERT_HOLD) / ALERT_FADE, 0.0, 1.0));
+    if (age > ALERT_HOLD) k = 1.0 - (age - ALERT_HOLD) / ALERT_FADE;
+    if (al.clicked >= 0.0) k = std::min(k, 1.0 - (now - al.clicked) / ALERT_CLICK_FADE);
+    return static_cast<float>(std::clamp(k, 0.0, 1.0));
 }
 
 static bool alertExpired(const Alert& al, double now) {
-    return now - al.born >= ALERT_HOLD + ALERT_FADE;
+    return alertOpacity(al, now) <= 0.0f;
 }
 
-// Alert toasts in the board's top-right corner. They are display-only (the
-// mouse goes straight through to the board) and fade away on their own.
+// Alert toasts in the board's top-right corner. They fade away on their own;
+// clicking one fades it out early.
 static void drawToasts(std::vector<Alert>& alerts, ImVec2 boardOrigin, ImVec2 boardSize, double now, float dt,
                        float S) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -1794,7 +1802,9 @@ static void drawToasts(std::vector<Alert>& alerts, ImVec2 boardOrigin, ImVec2 bo
         const float alpha = alertOpacity(al, now);
         const float slide = (1.0f - easeOutCubic(clamp01(age / 0.25f))) * 80 * S;
         const ImVec2 a(x1 - tw + slide, boardOrigin.y + al.y), b(x1 + slide, boardOrigin.y + al.y + h);
-        inkBox(dl, a, b, 14 * S, S, COL_PANEL, 3.0f, COL_INK, alpha);
+        al.rectMin = a;
+        al.rectMax = b;
+        inkBox(dl, a, b, 14 * S, S, al.hot ? COL_RAISED_HI : COL_PANEL, 3.0f, COL_INK, alpha);
         dl->AddCircleFilled(ImVec2(a.x + 18 * S, a.y + 11 * S + lineH * 0.5f), 5 * S, fadeAlpha(al.color, alpha));
         dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(a.x + 32 * S, a.y + 11 * S),
                     fadeAlpha(COL_TEXT, alpha), al.text.c_str(), nullptr, textW);
@@ -2733,8 +2743,27 @@ int main(int, char**) {
             return mouseIn || centerIn;
         };
 
+        // Alerts: clicking one fades it away. While the mouse is over one, the
+        // cards and the board underneath ignore it (rects are from last frame).
+        Alert* hotToast = nullptr;
+        {
+            const double now = ImGui::GetTime();
+            for (Alert& al : alerts) {
+                al.hot = false;
+                const bool inside = mouse.x >= al.rectMin.x && mouse.x <= al.rectMax.x &&
+                                    mouse.y >= al.rectMin.y && mouse.y <= al.rectMax.y;
+                if (mouseOnBoard && inside && al.clicked < 0.0 && alertOpacity(al, now) > 0.3f) hotToast = &al;
+            }
+        }
+        const bool mouseOverToast = hotToast != nullptr;
+        if (mouseOverToast) {
+            hotToast->hot = true;
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) hotToast->clicked = ImGui::GetTime();
+        }
+
         // Press: remember the state (for undo), raise the card, or start a selection box.
-        if (mouseOnBoard && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        if (mouseOnBoard && !mouseOverToast && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             pressSnapshot = snapshot();
             const int k = topCardAt(mouse);
             if (k >= 0) {
@@ -2747,7 +2776,7 @@ int main(int, char**) {
             }
         }
         // Right-click: context menu for the card under the mouse.
-        if (mouseOnBoard && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+        if (mouseOnBoard && !mouseOverToast && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
             const int k = topCardAt(mouse);
             if (k >= 0) {
                 menuRef = board.z[k];
@@ -2804,7 +2833,7 @@ int main(int, char**) {
             }
             const CardRef r = board.z[k];
             drawToken(encounter, r, board.get(r), boardOrigin, boardSize, amountLabel,
-                      !covered && !marqueeActive, actions);
+                      !covered && !marqueeActive && !mouseOverToast, actions);
         }
         // Effects (floating numbers, crit bursts) always sit above every card.
         {

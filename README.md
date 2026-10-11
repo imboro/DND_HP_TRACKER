@@ -298,10 +298,10 @@ left out.
 - death save failures and deaths
 - conditions running out
 
-Alerts stay for about 6 seconds, then slowly fade away on their own; there is
-nothing to dismiss, and clicks pass straight through them to the board. Repeated
-identical alerts are merged (and their timer restarts). Everything they said is
-also in the log.
+Alerts stay for about 3 seconds, then slowly fade away on their own. Click one
+to fade it away right away (the click doesn't reach the cards underneath).
+Repeated identical alerts are merged (and their timer restarts). Everything they
+said is also in the log.
 
 The **Log** tab records every hit, heal, condition, round, addition and
 removal, labeled with its round (`R3`). **Copy log** puts it on the clipboard,
