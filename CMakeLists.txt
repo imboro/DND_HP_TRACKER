@@ -27,7 +27,24 @@ add_executable(hp_tracker_gui
     ${IMGUI_DIR}/backends/imgui_impl_sdlrenderer2.cpp
 )
 target_include_directories(hp_tracker_gui PRIVATE ${IMGUI_DIR} ${IMGUI_DIR}/backends)
-target_link_libraries(hp_tracker_gui PRIVATE SDL2::SDL2)
+if(WIN32)
+    # SDL2main provides WinMain; WIN32_EXECUTABLE means no console window.
+    target_link_libraries(hp_tracker_gui PRIVATE SDL2::SDL2main SDL2::SDL2)
+    set_target_properties(hp_tracker_gui PROPERTIES WIN32_EXECUTABLE TRUE OUTPUT_NAME "DnD HP Tracker")
+    # Put SDL2.dll beside the built .exe so it runs straight from the build folder.
+    add_custom_command(TARGET hp_tracker_gui POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:hp_tracker_gui>)
+else()
+    target_link_libraries(hp_tracker_gui PRIVATE SDL2::SDL2)
+endif()
+
+# MinGW: bake the C++ runtime into the .exe so only SDL2.dll ships beside it.
+if(MINGW)
+    foreach(t console_demo logic_tests hp_tracker_gui)
+        target_link_options(${t} PRIVATE -static-libgcc -static-libstdc++)
+        target_link_libraries(${t} PRIVATE -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic)
+    endforeach()
+endif()
 
 # ---- macOS app bundle ------------------------------------------------------
 # `cmake --install build --prefix dist` produces dist/"DnD HP Tracker.app".

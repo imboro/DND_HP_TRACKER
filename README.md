@@ -405,6 +405,10 @@ bundled inside, so it runs on Macs without Homebrew. It's built for Apple Silico
 (arm64). Recipients right-click > Open the first time, or run
 `xattr -cr "DnD HP Tracker.app"`.
 
+**Windows version:** `windows/build_windows.sh` builds it on the Mac into
+`windows/dist/` (a folder with the `.exe` and `SDL2.dll`, plus a zip). See
+[windows/README.md](windows/README.md), which also covers building on a Windows PC.
+
 **Scripted UI tests:** `tools/ui_test/run_ui_tests.sh` builds a test copy of the app that
 drives itself with simulated mouse and keyboard input (clicks, box-select, area damage,
 undo, death saves, the edit dialog, the trash, ...), prints PASS/FAIL per check and
@@ -424,5 +428,6 @@ writes screenshots to `build/ui_test/`.
 | `main.cpp` | Console demo |
 | `package_mac.sh` | Builds the shareable app bundle and zip |
 | `tools/ui_test/` | Scripted end-to-end UI tests |
+| `windows/` | Windows build: script, compiler settings, and the read-me shipped in the zip |
 | `archive/` | Earlier versions kept for reference (the previous bright "neo-brutalist" theme, an old `encounter.cpp`) |
 | `docs/` | README screenshot |

@@ -3,6 +3,7 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <optional>
@@ -10,6 +11,9 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#ifdef _WIN32
+#include <filesystem>  // UTF-8 save paths (user folders with accents)
+#endif
 #include "imgui.h"
 #include "imgui_internal.h"  // GetHoveredID/GetActiveID for last-frame hover state
 #include "imgui_impl_sdl2.h"
@@ -22,7 +26,19 @@
 static const float UI_SCALE = 1.25f;
 
 // Mouse wheel / trackpad scrolling is scaled by this (1.0 = ImGui's default speed).
+// Mac trackpads send many small steps; a Windows wheel sends whole notches.
+#ifdef _WIN32
+static const float WHEEL_SENSITIVITY = 0.8f;
+#else
 static const float WHEEL_SENSITIVITY = 0.35f;
+#endif
+
+// Shortcut modifier as shown in menus (the shortcuts accept Ctrl and Cmd on both).
+#ifdef __APPLE__
+static const char* const MOD_KEY = "Cmd";
+#else
+static const char* const MOD_KEY = "Ctrl";
+#endif
 
 // Alerts stay fully visible this long, then fade out over ALERT_FADE seconds.
 static const double ALERT_HOLD = 6.0;
@@ -233,30 +249,41 @@ static void applyTheme() {
     c[ImGuiCol_NavCursor]      = toVec4(COL_INK);
 }
 
-// Tries a few common macOS fonts in order; returns null if none load.
-static ImFont* loadFirstFont(std::initializer_list<const char*> candidates, float pixelSize) {
-    for (const char* path : candidates) {
-        if (FILE* f = std::fopen(path, "rb")) {
+// Tries font files in order; returns null if none load.
+static ImFont* loadFirstFont(const std::vector<std::string>& candidates, float pixelSize) {
+    for (const std::string& path : candidates) {
+        if (FILE* f = std::fopen(path.c_str(), "rb")) {
             std::fclose(f);
-            if (ImFont* font = ImGui::GetIO().Fonts->AddFontFromFileTTF(path, pixelSize)) return font;
+            if (ImFont* font = ImGui::GetIO().Fonts->AddFontFromFileTTF(path.c_str(), pixelSize)) return font;
         }
     }
     return nullptr;
 }
 
-// Regular, bold and heavy faces. Falls back to ImGui's built-in font.
+// Regular, bold and heavy faces: Helvetica + Arial Bold / Arial Black on macOS,
+// the Arial family on Windows. Falls back to ImGui's built-in font.
 static bool loadSystemFonts(float pixelSize) {
-    const char* helvetica = "/System/Library/Fonts/Helvetica.ttc";
-    ImFont* regular = loadFirstFont({helvetica}, pixelSize);
+#ifdef _WIN32
+    const char* windir = std::getenv("WINDIR");
+    const std::string fonts = std::string(windir ? windir : "C:\\Windows") + "\\Fonts\\";
+    const std::vector<std::string> helvetica;  // not shipped with Windows
+    const std::vector<std::string> arial = {fonts + "arial.ttf"};
+    const std::vector<std::string> arialBold = {fonts + "arialbd.ttf"};
+    const std::vector<std::string> arialBlack = {fonts + "ariblk.ttf"};
+#else
+    const std::vector<std::string> helvetica = {"/System/Library/Fonts/Helvetica.ttc"};
+    const std::vector<std::string> arial = {"/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial.ttf"};
+    const std::vector<std::string> arialBold = {"/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+                                                "/Library/Fonts/Arial Bold.ttf"};
+    const std::vector<std::string> arialBlack = {"/System/Library/Fonts/Supplemental/Arial Black.ttf",
+                                                 "/Library/Fonts/Arial Black.ttf"};
+#endif
+    ImFont* regular = loadFirstFont(helvetica, pixelSize);
     const float regularLine = regular ? 1.0f : 1.117f;  // hhea ascent + descent, in em
-    if (regular == nullptr) {
-        regular = loadFirstFont({"/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial.ttf"}, pixelSize);
-    }
+    if (regular == nullptr) regular = loadFirstFont(arial, pixelSize);
     if (regular == nullptr) return false;
-    g_fontBold = loadFirstFont({"/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-                                "/Library/Fonts/Arial Bold.ttf"}, pixelSize);
-    g_fontHeavy = loadFirstFont({"/System/Library/Fonts/Supplemental/Arial Black.ttf",
-                                 "/Library/Fonts/Arial Black.ttf"}, pixelSize);
+    g_fontBold = loadFirstFont(arialBold, pixelSize);
+    g_fontHeavy = loadFirstFont(arialBlack, pixelSize);
     if (g_fontBold) g_boldMul = 1.117f / regularLine;
     if (g_fontHeavy) g_heavyMul = 1.41f / regularLine;
     ImGui::GetIO().FontDefault = regular;
@@ -1393,15 +1420,22 @@ static bool deserializeBoard(const std::string& text, Encounter& encounter, Boar
     return true;
 }
 
+// Save paths are UTF-8 (from SDL); on Windows they must be opened as wide paths.
+#ifdef _WIN32
+static std::filesystem::path fsPath(const std::string& utf8) { return std::filesystem::u8path(utf8); }
+#else
+static const std::string& fsPath(const std::string& utf8) { return utf8; }
+#endif
+
 static bool writeFile(const std::string& path, const std::string& text) {
-    std::ofstream out(path, std::ios::trunc);
+    std::ofstream out(fsPath(path), std::ios::trunc);
     if (!out) return false;
     out << text;
     return static_cast<bool>(out);
 }
 
 static bool readFile(const std::string& path, std::string& text) {
-    std::ifstream in(path);
+    std::ifstream in(fsPath(path));
     if (!in) return false;
     std::stringstream buffer;
     buffer << in.rdbuf();
@@ -1635,6 +1669,12 @@ static void drawToasts(std::vector<Alert>& alerts, ImVec2 boardOrigin, ImVec2 bo
 }
 
 int main(int, char**) {
+#ifdef _WIN32
+    // Crisp text on scaled displays (125%, 150%...): work in scaled points like
+    // macOS does, and render at the real pixel density.
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_SCALING, "1");
+#endif
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
         return 1;
@@ -2705,7 +2745,7 @@ int main(int, char**) {
                     editCustomCond[0] = '\0';
                     openEdit = true;
                 }
-                if (ImGui::MenuItem("Duplicate", "Cmd+D")) duplicate(sel);
+                if (ImGui::MenuItem("Duplicate", (std::string(MOD_KEY) + "+D").c_str())) duplicate(sel);
                 if (ImGui::MenuItem("Concentrating", nullptr, c->isConcentrating())) {
                     pushUndo();
                     const bool value = !c->isConcentrating();

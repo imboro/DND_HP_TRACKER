@@ -3,3 +3,12 @@ dist/
 imgui.ini
 main
 *.dSYM/
+
+# Windows build (windows/build_windows.sh)
+windows/deps/
+windows/build/
+windows/dist/
+
+# Archives and Finder junk
+*.zip
+.DS_Store
