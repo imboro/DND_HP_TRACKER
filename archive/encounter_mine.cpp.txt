@@ -1,0 +1,36 @@
+#include "encounter.h"
+#include <iostream>
+
+void Encounter::addCreature(Creature c) {
+    creatures.push_back(std::move(c));
+}
+
+void Encounter::damage(int index, int amount) {
+    if (index >= 0 && index < creatures.size()) {
+        creatures[index].takeDamage(amount);
+    }
+}
+
+void Encounter::heal(int index, int amount) {
+    if (index >= 0 && index < creatures.size()) {
+        creatures[index].heal(amount);
+    }
+}
+
+void Encounter::showStatus() const {
+    for (const auto& creature : creatures) {
+        creature.showHp();
+    }
+}
+
+bool Encounter::isOver() const {
+    for (const auto& creature : creatures) {
+        if (!creature.isDead()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+
