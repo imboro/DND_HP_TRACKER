@@ -1,15 +1,15 @@
 # DnD HP Tracker
 
-A combat tracker for Dungeons & Dragons 5e Dungeon Masters. Put the party and the
-monsters on a board as cards, in a **turn order** you arrange by hand, and pass the
-turn with one click. The tracker handles hit points, temporary HP, resistances,
-conditions, concentration checks, death saves and encounter difficulty, so you can
-focus on running the fight.
+A combat tracker for Dungeons & Dragons 5e Dungeon Masters. Set up the party and
+the monsters as cards in a **turn order** you arrange by hand, press **Start
+combat**, and pass the turn with one click; rounds count themselves. The tracker
+handles hit points, temporary HP, resistances, conditions, concentration checks,
+death saves and encounter difficulty, so you can focus on running the fight.
 
 There are no initiative numbers: you drag the cards into the order your table
 agreed on, and the tracker follows it.
 
-![The tracker: sidebar on the left, the Turn order and Defeated columns on the board, alerts top-right](docs/screenshot.png)
+![The tracker in combat: sidebar on the left; on the board the Turn order list, the spotlight with the card whose turn it is, and the Defeated column](docs/screenshot.png)
 
 ---
 
@@ -42,10 +42,13 @@ agreed on, and the tracker follows it.
    **Open**, because the app isn't signed by a paid Apple developer account.
 2. On first launch you get a sample Hero, Goblin and Orc. Delete them by dragging
    them onto the trash can, or use **New encounter > Remove everything**.
-3. **Right-click** the board and choose **New character...** to add your party and
-   monsters (or **Add from library**). Drag the cards into the turn order.
-4. Type an amount (e.g. `8`) in the **Amount** box and press **Damage** or
-   **Heal** on a card. Press **Next turn** (or Space) to pass the turn.
+3. **Set up:** right-click the list and choose **New character...** to add your party
+   and monsters (or **Add from library**). Drag the cards into turn order.
+4. Press **Start combat**. Type an amount (e.g. `8`) in the **Amount** box and press
+   **-** (damage) or **+** (heal) on a card, or the big buttons in the spotlight.
+   Press **Next turn** (or Space) to pass the turn; after the last card a new round
+   starts by itself.
+5. Press **End combat** when the fight is over: the enemies leave, the party stays.
 
 Everything autosaves, so closing the app never loses the fight.
 
@@ -64,7 +67,7 @@ Everything autosaves, so closing the app never loses the fight.
 - **Combat** tab
   - The damage/heal amount.
   - Actions for the selected creatures.
-  - Next turn, End round and the round counter.
+  - Before combat: Start combat. In combat: Next turn, the round, End combat.
   - Card size.
   - Encounter controls, save/load and undo/redo.
 - **Library** tab: the monster library.
@@ -72,28 +75,35 @@ Everything autosaves, so closing the app never loses the fight.
 
 **Right: the board**
 
-- **Turn order** (left): everyone still in the fight, top to bottom. The card that
-  holds the turn steps forward and wears a black **TURN** ribbon.
-- **Defeated** (right): enemies at 0 HP and players who have died. Cards fall
+- **Turn order** (left): everyone still in the fight, top to bottom, as compact
+  cards. The card that holds the turn steps forward and wears a black **TURN** ribbon.
+- **Spotlight** (top right): in combat, one card shown big (the one whose turn it is,
+  or the last card you clicked) with its stats, death saves, conditions, notes and
+  action buttons. Before combat, the setup panel with **Start combat**.
+- **Defeated** (bottom right): enemies at 0 HP and players who have died. Cards fall
   here by themselves.
-- Alerts pop up in the top-right corner.
-- The trash can is in the bottom-right corner.
+- Alerts pop up in the bottom-right corner, above the trash can.
 
 ---
 
 ## Reading a card
 
+Each card in the lists is a compact row:
+
 | Part | Meaning |
 |---|---|
-| Icon tile | Blue = player, red = enemy, gray = dead |
-| Icon | Heart = player, lightning bolt = enemy, X = dead |
-| `35 / 40 HP +5 temp` | Current / max HP, and temporary HP in blue |
-| `AC 15 · 30 ft · PP 12` | Armor Class, speed, passive Perception |
+| Icon tile | Blue heart = player, red bolt = enemy, gray X = dead |
 | Name | Struck through when dead |
-| HP bar | Green above 50%, amber above 25%, red below. A blue strip underneath shows temp HP |
-| Damage / Heal buttons | Apply the current amount to this creature only |
-| Six circles next to the name | Death saves: 3 successes (green) and 3 failures (red), shown for players at 0 HP |
-| Chips along the bottom | Status at a glance (see below) |
+| `35 / 40 +5` | Current / max HP, and temporary HP in blue |
+| HP bar | Green above 50%, amber above 25%, red below |
+| Six circles | Death saves: 3 successes (green) and 3 failures (red), in place of the bar for players at 0 HP |
+| Chips next to the bar | Status at a glance (see below) |
+| **-** / **+** | Damage / heal this creature by the current amount |
+
+Click a card to see it in the **spotlight**, which shows everything at full size:
+big HP and bar, AC, speed and passive Perception, resistances, CR and XP or level,
+death saves, all its chips, notes, and buttons for **Damage**, **Heal**, **+temp HP**
+and **Edit...**.
 
 **Chips:**
 
@@ -106,11 +116,10 @@ Everything autosaves, so closing the app never loses the fight.
 | `CONC` | Concentrating on a spell |
 | `RESIST` / `VULN` / `IMMUNE` | Takes half / double / no damage |
 | `Poisoned 3` | A condition; the number is rounds left (no number = until removed) |
-| `NOTE` | The creature has notes; hover the card to read them |
-| `+2` | Two more chips that don't fit; hover the card to see everything |
+| `NOTE` | The creature has notes (shown in the spotlight) |
+| `+2` | Two more chips that don't fit; the spotlight shows them all |
 
-**Hover** over a card for a moment to see its full details: stats, CR/XP or level,
-conditions with durations, and notes.
+**Hover** over a card for a moment to see its details in a tooltip too.
 
 ---
 
@@ -183,11 +192,10 @@ There are three ways to add a condition:
   conditions, a **custom condition** field (e.g. "Hexed", "Bless") and a duration
   for each.
 
-**End round** (Combat tab) counts every timed condition down by one round and
-increases the round counter. When a condition runs out you get an alert
-("Goblin 2: Poisoned ended"). Conditions with no duration stay until you remove them.
-
-Passing the turn does **not** end the round: you decide when a round ends.
+A round ends by itself when the turn passes the last card in the order: the round
+counter goes up and every timed condition counts down by one round. When a condition
+runs out you get an alert ("Goblin 2: Poisoned ended"). Conditions with no duration
+stay until you remove them.
 
 ---
 
@@ -299,7 +307,7 @@ left out.
 
 ## Alerts and the combat log
 
-**Alerts** appear in the board's top-right corner for things you must act on:
+**Alerts** appear in the board's bottom-right corner for things you must act on:
 
 - concentration saves
 - lost concentration
@@ -328,14 +336,21 @@ The board has two columns:
   save. Players at 0 HP who are still making death saves stay in the Turn order.
   If a fallen card is healed (or you undo), it goes back to its old slot.
 
+**Setup and combat**
+
+- Before combat (setup) you add, remove, edit and order the cards. **Start combat**
+  (in the spotlight or the Combat tab) sets round 1 and gives the turn to the top card.
+- **End combat** sends the enemies away and goes back to setup with the party as it
+  is (current HP, conditions), ready for the next fight.
+
 **Passing the turn**
 
 - Press **Next turn** (Combat tab), the **Space** or **Right arrow** key, or click the
-  black **TURN** ribbon on the active card. Defeated cards are skipped, and after the
-  last card it wraps around to the first. The round counter does not change: press
-  **End round** when the round is over.
+  black **TURN** ribbon on the active card. Defeated cards are skipped. After the last
+  card the turn goes back to the first one and a new round starts.
 - Right-click a card > **Start turn here** to jump the turn to any card.
 - If the card that holds the turn is defeated, the turn moves on by itself.
+- The spotlight follows the turn; click any card to look at it instead.
 
 **Arranging**
 
@@ -357,10 +372,10 @@ The board has two columns:
 - **Autosave** every few seconds and on quit. The last session reopens
   automatically.
 - **Save / Load** are manual save points (same file as the autosave).
-- **End encounter** marks the fight as over; **Resume** reopens it.
-- **New encounter** asks whether to **remove enemies but keep the party** (their
-  HP carries over, as between real fights) or **remove everything**. Undo can
-  bring the old one back.
+- **End combat** goes back to setup without the enemies (see [The turn order](#the-turn-order)).
+- **New encounter...** (in setup) asks whether to **remove enemies but keep the
+  party** (their HP carries over, as between real fights) or **remove everything**.
+  Undo can bring the old one back.
 
 Files are stored in `~/Library/Application Support/HotelWorkshop/HPTracker/`:
 

@@ -155,9 +155,14 @@ struct BoardState {
     bool dragValid = false;
     int round = 1;
 
-    // Whose turn it is (a member of z), if any.
+    // Setup (false: adding and ordering combatants) or combat (true: turns run).
+    bool inCombat = false;
+    // Whose turn it is (a member of z), if any. Only used in combat.
     CardRef turn{Side::Players, 0};
     bool turnValid = false;
+    // The card shown big in the spotlight panel: follows the turn, or the last clicked card.
+    CardRef focus{Side::Players, 0};
+    bool focusValid = false;
     // Vertical scroll of the two columns (0 = Turn order, 1 = Defeated).
     float scroll[2] = {0.0f, 0.0f};
     float scrollTarget[2] = {0.0f, 0.0f};
@@ -924,8 +929,9 @@ static void drawCardEffects(const CardState& st, ImVec2 size, float S) {
 
 // ---- Cards -----------------------------------------------------------------
 
-// Cards are as wide as their column; their height scales with the card size setting.
-static const float CARD_H = 106.0f;
+// Cards are compact rows as wide as their column; their height scales with the
+// card size setting. The full details of one card live in the spotlight panel.
+static const float CARD_H = 58.0f;
 
 static float cardHeight() {
     return CARD_H * cardS();
@@ -938,11 +944,12 @@ struct Chip {
 
 // Status chips along the bottom of a card; "+N" when they don't all fit.
 // A chip's color tints its fill and border and colors its text.
-static void drawChips(ImDrawList* dl, ImVec2 start, float maxX, const std::vector<Chip>& chips, float S) {
-    const float mul = 0.78f;
-    const float h = 19 * S;
-    const float padX = 7 * S;
-    const float gap = 5 * S;
+static void drawChips(ImDrawList* dl, ImVec2 start, float maxX, const std::vector<Chip>& chips, float S,
+                      float scale = 1.0f) {
+    const float mul = 0.78f * scale;
+    const float h = 19 * S * scale;
+    const float padX = 7 * S * scale;
+    const float gap = 5 * S * scale;
     float x = start.x;
     for (size_t i = 0; i < chips.size(); i++) {
         const ImVec2 ts = fontTextSize(boldFont(), chips[i].text.c_str(), mul);
@@ -1044,23 +1051,25 @@ struct CardActions {
     std::function<void(CardRef)> heal;
     std::function<void(CardRef, int, int)> setDeathSaves;
     std::function<void()> nextTurn;
+    std::function<void(CardRef)> temp;   // spotlight: grant temp HP
+    std::function<void(CardRef)> edit;   // spotlight: open the edit window
 };
 
-// Draws one compact creature card (it lives in a column of the board) and
-// handles its buttons. `interactive` is false for cards hidden under another
-// card at the mouse position, so only the front card receives the press.
-// `isTurn` marks the card that holds the turn (it steps forward and wears a
-// "TURN" ribbon that advances the turn when clicked).
+// Draws one compact row card (it lives in a column of the board) and handles
+// its buttons. `interactive` is false for cards hidden under another card at
+// the mouse position, so only the front card receives the press. `isTurn`
+// marks the card that holds the turn (it steps forward and wears a "TURN"
+// ribbon that advances the turn when clicked). Details live in the spotlight.
 static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 boardOrigin,
-                      const std::string& amountLabel, bool interactive, bool isTurn,
+                      const std::string& amountLabel, bool interactive, bool isTurn, bool isFocus,
                       const CardActions& act) {
     const Creature& c = *encounter.at(ref.side, ref.index);
     const Side side = ref.side;
     const ImVec2 size = st.size;
     const float S = cardS();
-    const float pad = 10 * S;
+    const float pad = 9 * S;
     bool showTooltip = false;
-    const float round = 14 * S;
+    const float round = 12 * S;
     const float outline = (isTurn ? 3.0f : 2.0f) * S;
     const float time = static_cast<float>(ImGui::GetTime());
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -1102,9 +1111,9 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     float thud = 0.0f;
     if (showDead && st.deathT < 0.4f) {
         const float u = st.deathT / 0.4f;
-        thud = std::sin(u * 3.14159265f) * 7.0f * S * (1.0f - 0.5f * u);
+        thud = std::sin(u * 3.14159265f) * 6.0f * S * (1.0f - 0.5f * u);
     }
-    const float drop = (1.0f - spawnK) * -16.0f * S;
+    const float drop = (1.0f - spawnK) * -14.0f * S;
     const ImVec2 p(boardOrigin.x + pos.x + shake.x, boardOrigin.y + pos.y + shake.y + thud + drop);
     const ImVec2 pEnd(p.x + size.x, p.y + size.y);
     st.drawPos = p;
@@ -1121,21 +1130,23 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     st.selAnim = approach(st.selAnim, st.selected ? 1.0f : 0.0f, 20.0f, dt);
     if (st.selAnim > 0.01f) {
         const float e = easeOutCubic(st.selAnim);
-        const float g = lerpf(0.0f, 5.0f, e) * S;
-        const ImVec2 r0 = p - ImVec2(g, g), r1 = pEnd + ImVec2(g + 4 * S, g + 5 * S);
+        const float g = lerpf(0.0f, 4.0f, e) * S;
+        const ImVec2 r0 = p - ImVec2(g, g), r1 = pEnd + ImVec2(g + 3 * S, g + 4 * S);
         dl->AddRectFilled(r0, r1, withAlpha(COL_SELECT, static_cast<int>(40 * e)), round + g);
-        dl->AddRect(r0, r1, withAlpha(COL_SELECT, static_cast<int>(255 * e)), round + g, 0, 3.0f * S);
+        dl->AddRect(r0, r1, withAlpha(COL_SELECT, static_cast<int>(255 * e)), round + g, 0, 2.5f * S);
     }
 
     // Hard ink shadow: rises on hover, more while held, flattens when dead.
     const bool held = ImGui::GetActiveID() == dragId;
-    const float liftTarget = lerpf(held ? 7.0f : (hoveredOrActive ? 5.5f : 4.0f), 1.5f, deadK);
+    const float liftTarget = lerpf(held ? 6.0f : (hoveredOrActive ? 4.5f : 3.0f), 1.0f, deadK);
     st.lift = approach(st.lift, liftTarget, 18.0f, dt);
     const float lift = st.lift;
     const ImU32 outlineCol = mixColor(COL_INK, COL_BORDER_HI, deadK);
     dl->AddRectFilled(p + ImVec2(lift * S, (lift + 1) * S), pEnd + ImVec2(lift * S, (lift + 1) * S), outlineCol, round);
-    // Body: dying players pulse faintly like a heartbeat; the dead fade to gray.
+    // Body: dying players pulse faintly like a heartbeat; the dead fade to gray;
+    // the card shown in the spotlight gets a faint tint.
     ImU32 aliveBody = hoveredOrActive ? COL_CARD_HI : COL_CARD;
+    if (isFocus) aliveBody = IM_COL32(250, 248, 238, 255);
     if (life == Life::Dying || (showDead && side == Side::Players)) {
         const float beat = life == Life::Dying ? 0.5f + 0.5f * std::sin(time * 4.0f) : 0.5f;
         aliveBody = mixColor(IM_COL32(255, 244, 242, 255), IM_COL32(255, 228, 224, 255), beat);
@@ -1156,135 +1167,89 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     }
     dl->AddRect(p, pEnd, outlineCol, round, 0, outline);
 
-    // Row 1, left: icon tile with a line glyph in the side's color.
-    const float iconSize = 34 * S;
-    const ImVec2 iconMin(p.x + pad, p.y + pad);
+    // Left: icon tile with a line glyph in the side's color.
+    const float iconSize = 32 * S;
+    const ImVec2 iconMin(p.x + pad, p.y + (size.y - iconSize) * 0.5f);
     const ImVec2 iconMax(iconMin.x + iconSize, iconMin.y + iconSize);
-    dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, 30), 10 * S);
+    dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, 30), 9 * S);
     const ImVec2 glyphOrigin(iconMin.x + iconSize * 0.15f, iconMin.y + iconSize * 0.15f);
     const float glyphSize = iconSize * 0.7f;
     // On death the heart/bolt fades out while a cross is drawn over it stroke by stroke.
     const float oldGlyph = showDead ? 1.0f - clamp01(st.deathT / 0.2f) : 1.0f;
     if (oldGlyph > 0.0f) {
-        if (side == Side::Players) drawHeart(dl, glyphOrigin, glyphSize, 2.4f * S, fadeAlpha(accent, oldGlyph));
-        else drawBolt(dl, glyphOrigin, glyphSize, 2.4f * S, fadeAlpha(accent, oldGlyph));
+        if (side == Side::Players) drawHeart(dl, glyphOrigin, glyphSize, 2.2f * S, fadeAlpha(accent, oldGlyph));
+        else drawBolt(dl, glyphOrigin, glyphSize, 2.2f * S, fadeAlpha(accent, oldGlyph));
     }
     if (showDead) {
-        drawCrossPartial(dl, glyphOrigin, glyphSize, 2.4f * S, accent, easeOutCubic(clamp01(st.deathT / 0.16f)),
+        drawCrossPartial(dl, glyphOrigin, glyphSize, 2.2f * S, accent, easeOutCubic(clamp01(st.deathT / 0.16f)),
                          easeOutCubic(clamp01((st.deathT - 0.14f) / 0.16f)));
     }
 
-    const float lineH = ImGui::GetTextLineHeight();
-    const float textX = iconMax.x + 10 * S;
+    // Right: small Damage (-) / Heal (+) buttons for the current amount.
+    const float btn = 26 * S;
+    const float btnGap = 6 * S;
+    const ImVec2 healMin(pEnd.x - pad - btn, p.y + (size.y - btn) * 0.5f);
+    const ImVec2 dmgMin(healMin.x - btnGap - btn, healMin.y);
+    st.damageCenter = ImVec2(dmgMin.x + btn * 0.5f, dmgMin.y + btn * 0.5f);
+    st.healCenter = ImVec2(healMin.x + btn * 0.5f, healMin.y + btn * 0.5f);
+    // Covered cards only draw their buttons (no ImGui item), so they can't
+    // steal the press from the card in front.
+    ImGui::SetCursorScreenPos(dmgMin);
+    if (flatButton("-##dmg", ImVec2(btn, btn), BTN_RED, true, interactive)) act.damage(ref);
+    if (interactive && ImGui::IsItemHovered()) ImGui::SetTooltip("Damage %s", amountLabel.c_str());
+    ImGui::SetCursorScreenPos(healMin);
+    if (flatButton("+##heal", ImVec2(btn, btn), BTN_GREEN, true, interactive)) act.heal(ref);
+    if (interactive && ImGui::IsItemHovered()) ImGui::SetTooltip("Heal %s", amountLabel.c_str());
 
-    // Row 1, right: HP (+temp), right-aligned.
-    float hpLeft = pEnd.x - pad;
+    const float lineH = ImGui::GetTextLineHeight();
+    const float textX = iconMax.x + 9 * S;
+    const float rightLimit = dmgMin.x - 10 * S;
+
+    // Line 1, right: HP (+temp), right-aligned against the buttons.
+    float hpLeft = rightLimit;
+    const float line1Y = p.y + pad;
     {
         const std::string cur = std::to_string(c.getCurrentHp());
-        const std::string rest = " / " + std::to_string(c.getMaxHp()) + " HP";
-        const std::string tempText = c.getTempHp() > 0 ? "  +" + std::to_string(c.getTempHp()) + " temp" : "";
+        const std::string rest = " / " + std::to_string(c.getMaxHp());
+        const std::string tempText = c.getTempHp() > 0 ? " +" + std::to_string(c.getTempHp()) : "";
         const float wCur = heavyTextSize(cur.c_str()).x;
         const float wRest = ImGui::CalcTextSize(rest.c_str()).x;
         const float wTemp = tempText.empty() ? 0.0f : ImGui::CalcTextSize(tempText.c_str()).x;
-        hpLeft = pEnd.x - pad - (wCur + wRest + wTemp);
-        const ImVec2 hp(hpLeft, p.y + pad);
-        heavyText(dl, hp, mixColor(COL_TEXT, COL_MUTED, deadK), cur.c_str());
-        dl->AddText(ImVec2(hp.x + wCur, hp.y), COL_MUTED, rest.c_str());
-        if (!tempText.empty()) dl->AddText(ImVec2(hp.x + wCur + wRest, hp.y), COL_TEMP, tempText.c_str());
+        hpLeft = rightLimit - (wCur + wRest + wTemp);
+        heavyText(dl, ImVec2(hpLeft, line1Y), mixColor(COL_TEXT, COL_MUTED, deadK), cur.c_str());
+        dl->AddText(ImVec2(hpLeft + wCur, line1Y), COL_MUTED, rest.c_str());
+        if (!tempText.empty()) dl->AddText(ImVec2(hpLeft + wCur + wRest, line1Y), COL_TEMP, tempText.c_str());
     }
 
-    // Name (heavy, struck through when dead) with AC / speed / passive perception below.
+    // Line 1, left: name (heavy, struck through when dead), then status chips.
     const std::string& name = c.getName();
-    const float nameMul = 1.2f;
-    const float nameDraw = 1.08f;  // the heavy face runs wide; slightly smaller than the slot
-    const ImVec2 namePos(textX, p.y + pad - 1 * S);
-    dl->PushClipRect(ImVec2(textX, p.y), ImVec2(std::max(textX + 20 * S, hpLeft - 8 * S), pEnd.y), true);
-    heavyText(dl, namePos + ImVec2(0, 1 * S), mixColor(COL_TEXT, COL_MUTED, deadK), name.c_str(), nameDraw);
+    const float nameDraw = 1.02f;
+    const float nameRight = std::max(textX + 20 * S, hpLeft - 8 * S);
+    const ImVec2 ns = heavyTextSize(name.c_str(), nameDraw);
+    dl->PushClipRect(ImVec2(textX, p.y), ImVec2(nameRight, pEnd.y), true);
+    heavyText(dl, ImVec2(textX, line1Y), mixColor(COL_TEXT, COL_MUTED, deadK), name.c_str(), nameDraw);
     dl->PopClipRect();
     if (showDead) {
         // The strike-through is drawn left to right, just after the cross.
         const float strike = easeOutCubic(clamp01((st.deathT - 0.25f) / 0.3f));
-        const ImVec2 ns = heavyTextSize(name.c_str(), nameDraw);
-        const float y = namePos.y + 1 * S + ns.y * 0.55f;
-        const float x1 = std::min(namePos.x + ns.x, std::max(textX + 20 * S, hpLeft - 8 * S));
-        if (strike > 0.0f) {
-            dl->AddLine(ImVec2(namePos.x, y), ImVec2(lerpf(namePos.x, x1, strike), y), COL_MUTED, 1.5f * S);
-        }
+        const float y = line1Y + ns.y * 0.55f;
+        const float x1 = std::min(textX + ns.x, nameRight);
+        if (strike > 0.0f) dl->AddLine(ImVec2(textX, y), ImVec2(lerpf(textX, x1, strike), y), COL_MUTED, 1.5f * S);
     }
-    const std::string statLine = "AC " + std::to_string(c.getAc()) + "  \xC2\xB7  " + std::to_string(c.getSpeed()) +
-                                 " ft  \xC2\xB7  PP " + std::to_string(c.getPassivePerception());
-    const float line2Y = namePos.y + lineH * nameMul + 1 * S;
-    dl->AddText(ImVec2(textX, line2Y), COL_MUTED, statLine.c_str());
-
-    // HP bar: a pill with an ink outline; temp HP as a blue strip below.
-    const float barTop = p.y + pad + iconSize + 8 * S;
-    const float barHeight = 12 * S;
-    const float barRound = barHeight * 0.5f;
-    const ImVec2 barMin(p.x + pad, barTop);
-    const ImVec2 barMax(pEnd.x - pad, barTop + barHeight);
-    const BarVis bar = computeBar(st, c.getCurrentHp(), c.getMaxHp());
-    const float barW = barMax.x - barMin.x;
-    dl->AddRectFilled(barMin, barMax, COL_TRACK, barRound);
-    dl->PushClipRect(barMin, barMax, true);
-    if (bar.fillEnd > 0.0f) {
-        const float targetFrac = c.getMaxHp() > 0
-            ? static_cast<float>(c.getCurrentHp()) / static_cast<float>(c.getMaxHp()) : 0.0f;
-        dl->AddRectFilled(barMin, ImVec2(barMin.x + barW * bar.fillEnd, barMax.y), hpColor(targetFrac), barRound);
-    }
-    if (bar.hasChunk && bar.chunkEnd > bar.fillEnd) {
-        // The "pre-bar": the part of the bar about to be lost or gained.
-        ImU32 chunk;
-        const float k = clamp01(st.t / 0.3f);
-        if (!st.heal) {
-            chunk = IM_COL32(255, static_cast<int>(lerpf(214, 90, k)), static_cast<int>(lerpf(120, 80, k)), 255);
-        } else {
-            chunk = IM_COL32(static_cast<int>(lerpf(200, 120, k)), static_cast<int>(lerpf(250, 220, k)), static_cast<int>(lerpf(170, 140, k)), 255);
-        }
-        const float x0 = barMin.x + barW * bar.fillEnd;
-        const float x1 = barMin.x + barW * bar.chunkEnd;
-        dl->AddRectFilled(ImVec2(x0, barMin.y), ImVec2(x1, barMax.y), chunk);
-        dl->AddLine(ImVec2(x0, barMin.y), ImVec2(x0, barMax.y), COL_INK, 1.5f * S);
-    } else if (bar.fillEnd > 0.0f && bar.fillEnd < 1.0f) {
-        const float x = barMin.x + barW * bar.fillEnd;
-        dl->AddLine(ImVec2(x, barMin.y), ImVec2(x, barMax.y), COL_INK, 1.5f * S);
-    }
-    dl->PopClipRect();
-    dl->AddRect(barMin, barMax, showDead ? COL_BORDER_HI : COL_INK, barRound, 0, 1.5f * S);
-    if (c.getTempHp() > 0) {
-        const float frac = std::min(1.0f, static_cast<float>(c.getTempHp()) / static_cast<float>(c.getMaxHp()));
-        const ImVec2 tMin(barMin.x + 2 * S, barMax.y + 3 * S);
-        const ImVec2 tMax(barMin.x + 2 * S + std::max(6 * S, (barW - 4 * S) * frac), barMax.y + 7 * S);
-        dl->AddRectFilled(tMin, tMax, COL_TEMP, 3 * S);
-    }
-
-    // Row 3: Damage / Heal buttons, then the status chips.
-    const float buttonWidth = 84 * S;
-    const float buttonHeight = 24 * S;
-    const float buttonGap = 8 * S;
-    const float buttonsY = barMax.y + 11 * S;
-    ImGui::SetCursorScreenPos(ImVec2(p.x + pad, buttonsY));
-    const std::string damageLabel = "Damage " + amountLabel + "##dmg";
-    const std::string healLabel = "Heal " + amountLabel + "##heal";
-    st.damageCenter = ImVec2(p.x + pad + buttonWidth * 0.5f, buttonsY + buttonHeight * 0.5f);
-    st.healCenter = ImVec2(p.x + pad + buttonWidth + buttonGap + buttonWidth * 0.5f, buttonsY + buttonHeight * 0.5f);
-    // Covered cards only draw their buttons (no ImGui item), so they can't
-    // steal the press from the card in front.
-    if (flatButton(damageLabel.c_str(), ImVec2(buttonWidth, buttonHeight), BTN_RED, true, interactive)) {
-        act.damage(ref);
-    }
-    ImGui::SetCursorScreenPos(ImVec2(p.x + pad + buttonWidth + buttonGap, buttonsY));
-    if (flatButton(healLabel.c_str(), ImVec2(buttonWidth, buttonHeight), BTN_GREEN, true, interactive)) {
-        act.heal(ref);
-    }
-
-    // Death saves (players at 0 HP): 3 successes, 3 failures, click to set.
+    // Line 2: the HP bar (or the death-save pips for a player at 0 HP), then the
+    // status chips when there are any.
+    const std::vector<Chip> chips = cardChips(side, c, life, time);
+    const float barH = 8 * S;
+    const float line2Y = pEnd.y - pad - barH - 2 * S;
+    const float barEnd = chips.empty() ? rightLimit : std::max(textX + 60 * S, textX + (rightLimit - textX) * 0.42f);
+    float chipsX = barEnd + 10 * S;
     st.hasPips = side == Side::Players && c.getCurrentHp() == 0;
     if (st.hasPips) {
-        const float d = 13 * S;
+        const float d = 12 * S;
         const float gap = 4 * S;
         const float groupGap = 12 * S;
-        const float cy = line2Y + lineH * 0.5f;
-        float x = pEnd.x - pad - (d * 6 + gap * 4 + groupGap);
+        const float cy = line2Y + barH * 0.5f;
+        float x = textX;
         int pip = 0;
         for (int group = 0; group < 2; group++) {
             const bool success = group == 0;
@@ -1312,20 +1277,49 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
             }
             x += groupGap - gap;
         }
+        chipsX = x + 6 * S;
+    } else {
+        const float barRound = barH * 0.5f;
+        const ImVec2 barMin(textX, line2Y);
+        const ImVec2 barMax(barEnd, line2Y + barH);
+        const BarVis bar = computeBar(st, c.getCurrentHp(), c.getMaxHp());
+        const float barW = barMax.x - barMin.x;
+        dl->AddRectFilled(barMin, barMax, COL_TRACK, barRound);
+        dl->PushClipRect(barMin, barMax, true);
+        if (bar.fillEnd > 0.0f) {
+            const float targetFrac = c.getMaxHp() > 0
+                ? static_cast<float>(c.getCurrentHp()) / static_cast<float>(c.getMaxHp()) : 0.0f;
+            dl->AddRectFilled(barMin, ImVec2(barMin.x + barW * bar.fillEnd, barMax.y), hpColor(targetFrac), barRound);
+        }
+        if (bar.hasChunk && bar.chunkEnd > bar.fillEnd) {
+            // The "pre-bar": the part of the bar about to be lost or gained.
+            ImU32 chunk;
+            const float k = clamp01(st.t / 0.3f);
+            if (!st.heal) {
+                chunk = IM_COL32(255, static_cast<int>(lerpf(214, 90, k)), static_cast<int>(lerpf(120, 80, k)), 255);
+            } else {
+                chunk = IM_COL32(static_cast<int>(lerpf(200, 120, k)), static_cast<int>(lerpf(250, 220, k)), static_cast<int>(lerpf(170, 140, k)), 255);
+            }
+            const float x0 = barMin.x + barW * bar.fillEnd;
+            const float x1 = barMin.x + barW * bar.chunkEnd;
+            dl->AddRectFilled(ImVec2(x0, barMin.y), ImVec2(x1, barMax.y), chunk);
+        }
+        dl->PopClipRect();
+        dl->AddRect(barMin, barMax, showDead ? COL_BORDER_HI : COL_INK, barRound, 0, 1.25f * S);
     }
-
-    // Status chips: life state, bloodied, concentration, resistances, conditions, notes.
-    drawChips(dl, ImVec2(p.x + pad + buttonWidth * 2 + buttonGap + 12 * S, buttonsY + (buttonHeight - 19 * S) * 0.5f),
-              pEnd.x - pad, cardChips(side, c, life, time), S);
+    if (!chips.empty() && chipsX + 30 * S < rightLimit) {
+        drawChips(dl, ImVec2(chipsX, line2Y + barH * 0.5f - 8.0f * S), rightLimit, chips, S, 0.84f);
+    }
+    (void)lineH;
 
     // The turn ribbon: a black "TURN" tab on the card's top edge. Clicking it
     // passes the turn on. Submitted before the drag handle so it wins the press.
     if (st.turnAnim > 0.02f) {
         const float k = easeOutCubic(st.turnAnim);
-        const float rh = 18 * S;
-        const ImVec2 tw = fontTextSize(boldFont(), "TURN", 0.78f);
-        const float rw = 14 * S + tw.x + 20 * S;
-        const ImVec2 r0(p.x + 16 * S, p.y - rh * 0.55f - (1.0f - k) * 6 * S);
+        const float rh = 16 * S;
+        const ImVec2 tw = fontTextSize(boldFont(), "TURN", 0.74f);
+        const float rw = 13 * S + tw.x + 18 * S;
+        const ImVec2 r0(p.x + 14 * S, p.y - rh * 0.6f - (1.0f - k) * 6 * S);
         const ImVec2 r1(r0.x + rw, r0.y + rh);
         st.turnCenter = ImVec2((r0.x + r1.x) * 0.5f, (r0.y + r1.y) * 0.5f);
         bool hot = false;
@@ -1340,10 +1334,10 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
         }
         dl->AddRectFilled(r0, r1, fadeAlpha(hot ? IM_COL32(64, 64, 66, 255) : COL_INK, k), rh * 0.5f);
         const float mid = (r0.y + r1.y) * 0.5f;
-        const float tx = r0.x + 9 * S;
-        dl->AddTriangleFilled(ImVec2(tx, mid - 4 * S), ImVec2(tx, mid + 4 * S), ImVec2(tx + 7 * S, mid),
+        const float tx = r0.x + 8 * S;
+        dl->AddTriangleFilled(ImVec2(tx, mid - 3.5f * S), ImVec2(tx, mid + 3.5f * S), ImVec2(tx + 6 * S, mid),
                               fadeAlpha(COL_WHITE, k));
-        fontText(dl, boldFont(), ImVec2(tx + 12 * S, mid - tw.y * 0.5f), fadeAlpha(COL_WHITE, k), "TURN", 0.78f);
+        fontText(dl, boldFont(), ImVec2(tx + 11 * S, mid - tw.y * 0.5f), fadeAlpha(COL_WHITE, k), "TURN", 0.74f);
     }
 
     // The whole card is the drag handle. It is submitted last so the buttons
@@ -1382,6 +1376,184 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
 
     cardFont.reset();  // tooltips use the normal UI size
     if (showTooltip) cardTooltip(side, c);
+    ImGui::PopID();
+}
+
+// The spotlight panel: one combatant shown big (the one whose turn it is, or
+// the last one clicked), with everything the compact row has no room for:
+// big HP and bar, stats, the action buttons, death saves, chips and notes.
+static void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 a, ImVec2 b,
+                          const std::string& amountLabel, bool holdsTurn, const CardActions& act) {
+    const Creature& c = *encounter.at(ref.side, ref.index);
+    const Side side = ref.side;
+    const float S = UI_SCALE;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float pad = 18 * S;
+    const Life life = lifeOf(side, c);
+    const bool dead = life == Life::Dead;
+    const float time = static_cast<float>(ImGui::GetTime());
+    const float lineH = ImGui::GetTextLineHeight();
+    const ImU32 accent = dead ? COL_GRAY : (side == Side::Players ? COL_PLAYER : COL_RED);
+    const float x0 = a.x + pad, x1 = b.x - pad;
+    float y = a.y + pad;
+
+    ImGui::PushID("spotlight");
+    ImGui::PushClipRect(a, b, true);
+
+    // Header: icon, name, what it is; a TURN pill when it holds the turn.
+    {
+        const float icon = 46 * S;
+        const ImVec2 iconMin(x0, y), iconMax(x0 + icon, y + icon);
+        dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, 30), 12 * S);
+        const ImVec2 go(iconMin.x + icon * 0.15f, iconMin.y + icon * 0.15f);
+        if (dead) drawCross(dl, go, icon * 0.7f, 2.8f * S, accent);
+        else if (side == Side::Players) drawHeart(dl, go, icon * 0.7f, 2.8f * S, accent);
+        else drawBolt(dl, go, icon * 0.7f, 2.8f * S, accent);
+
+        std::string what = side == Side::Players ? "Player  \xC2\xB7  Level " + std::to_string(c.getLevel()) : "Enemy";
+        if (side == Side::Creatures && c.getCrIndex() >= 0) {
+            what += std::string("  \xC2\xB7  CR ") + crLabel(c.getCrIndex()) + "  \xC2\xB7  " +
+                    std::to_string(crXp(c.getCrIndex())) + " XP";
+        }
+        float nameRight = x1;
+        if (holdsTurn) {
+            const ImVec2 tw = boldTextSize("TURN", 0.85f);
+            const float ph = 24 * S, pw = tw.x + 34 * S;
+            const ImVec2 p0(x1 - pw, y + 2 * S), p1(x1, y + 2 * S + ph);
+            dl->AddRectFilled(p0, p1, COL_INK, ph * 0.5f);
+            const float mid = (p0.y + p1.y) * 0.5f, tx = p0.x + 11 * S;
+            dl->AddTriangleFilled(ImVec2(tx, mid - 4.5f * S), ImVec2(tx, mid + 4.5f * S), ImVec2(tx + 8 * S, mid), COL_WHITE);
+            boldText(dl, ImVec2(tx + 13 * S, mid - tw.y * 0.5f), COL_WHITE, "TURN", 0.85f);
+            nameRight = p0.x - 10 * S;
+        }
+        const float nx = iconMax.x + 14 * S;
+        dl->PushClipRect(ImVec2(nx, a.y), ImVec2(nameRight, b.y), true);
+        heavyText(dl, ImVec2(nx, y - 1 * S), dead ? COL_MUTED : COL_TEXT, c.getName().c_str(), 1.45f);
+        dl->PopClipRect();
+        dl->AddText(ImVec2(nx, y + icon - lineH - 1 * S), COL_MUTED, what.c_str());
+        y += icon + 16 * S;
+    }
+
+    // Big HP, then a thick bar (same pre-bar animation as the row).
+    {
+        const std::string cur = std::to_string(c.getCurrentHp());
+        const std::string rest = " / " + std::to_string(c.getMaxHp()) + " HP";
+        const ImVec2 cs = heavyTextSize(cur.c_str(), 2.0f);
+        heavyText(dl, ImVec2(x0, y), dead ? COL_MUTED : COL_TEXT, cur.c_str(), 2.0f);
+        const float restY = y + cs.y - lineH * 1.15f;
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.15f, ImVec2(x0 + cs.x + 4 * S, restY), COL_MUTED, rest.c_str());
+        if (c.getTempHp() > 0) {
+            const std::string temp = "+" + std::to_string(c.getTempHp()) + " temp";
+            const ImVec2 rs = sizedTextSize(rest.c_str(), 1.15f);
+            dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.15f, ImVec2(x0 + cs.x + 12 * S + rs.x, restY), COL_TEMP, temp.c_str());
+        }
+        y += cs.y + 8 * S;
+
+        const float barH = 16 * S;
+        const ImVec2 barMin(x0, y), barMax(x1, y + barH);
+        const float barW = barMax.x - barMin.x;
+        const BarVis bar = computeBar(st, c.getCurrentHp(), c.getMaxHp());
+        dl->AddRectFilled(barMin, barMax, COL_TRACK, barH * 0.5f);
+        dl->PushClipRect(barMin, barMax, true);
+        if (bar.fillEnd > 0.0f) {
+            const float frac = c.getMaxHp() > 0 ? static_cast<float>(c.getCurrentHp()) / static_cast<float>(c.getMaxHp()) : 0.0f;
+            dl->AddRectFilled(barMin, ImVec2(barMin.x + barW * bar.fillEnd, barMax.y), hpColor(frac), barH * 0.5f);
+        }
+        if (bar.hasChunk && bar.chunkEnd > bar.fillEnd) {
+            const float k = clamp01(st.t / 0.3f);
+            const ImU32 chunk = !st.heal
+                ? IM_COL32(255, static_cast<int>(lerpf(214, 90, k)), static_cast<int>(lerpf(120, 80, k)), 255)
+                : IM_COL32(static_cast<int>(lerpf(200, 120, k)), static_cast<int>(lerpf(250, 220, k)), static_cast<int>(lerpf(170, 140, k)), 255);
+            dl->AddRectFilled(ImVec2(barMin.x + barW * bar.fillEnd, barMin.y), ImVec2(barMin.x + barW * bar.chunkEnd, barMax.y), chunk);
+        }
+        dl->PopClipRect();
+        dl->AddRect(barMin, barMax, dead ? COL_BORDER_HI : COL_INK, barH * 0.5f, 0, 1.75f * S);
+        if (c.getTempHp() > 0 && c.getMaxHp() > 0) {
+            const float frac = std::min(1.0f, static_cast<float>(c.getTempHp()) / static_cast<float>(c.getMaxHp()));
+            dl->AddRectFilled(ImVec2(barMin.x + 3 * S, barMax.y + 4 * S),
+                              ImVec2(barMin.x + 3 * S + std::max(8 * S, (barW - 6 * S) * frac), barMax.y + 9 * S), COL_TEMP, 3 * S);
+        }
+        y += barH + 16 * S;
+    }
+
+    // Stats line.
+    {
+        std::string stats = "AC " + std::to_string(c.getAc()) + "   \xC2\xB7   Speed " + std::to_string(c.getSpeed()) +
+                            " ft   \xC2\xB7   Passive Perception " + std::to_string(c.getPassivePerception());
+        if (c.getDamageMod() != DamageMod::Normal) stats += std::string("   \xC2\xB7   ") + damageModName(c.getDamageMod());
+        if (ImGui::CalcTextSize(stats.c_str()).x > x1 - x0) {  // narrow panel: the short form
+            stats = "AC " + std::to_string(c.getAc()) + "  \xC2\xB7  " + std::to_string(c.getSpeed()) + " ft  \xC2\xB7  PP " +
+                    std::to_string(c.getPassivePerception());
+            if (c.getDamageMod() != DamageMod::Normal) stats += std::string("  \xC2\xB7  ") + damageModName(c.getDamageMod());
+        }
+        dl->AddText(ImVec2(x0, y), COL_MUTED, stats.c_str());
+        y += lineH + 14 * S;
+    }
+
+    // Death saves (players at 0 HP): big pips, click to set.
+    if (side == Side::Players && c.getCurrentHp() == 0) {
+        dl->AddText(ImVec2(x0, y + 2 * S), COL_TEXT, "Death saves");
+        const float d = 18 * S, gap = 6 * S;
+        float x = x0 + ImGui::CalcTextSize("Death saves").x + 16 * S;
+        for (int group = 0; group < 2; group++) {
+            const bool success = group == 0;
+            const int have = success ? c.getDeathSuccesses() : c.getDeathFailures();
+            for (int i = 0; i < 3; i++) {
+                const ImVec2 center(x + d * 0.5f, y + lineH * 0.5f + 2 * S);
+                const bool filled = i < have;
+                dl->AddCircleFilled(center, d * 0.5f, filled ? (success ? COL_GREEN : COL_RED) : COL_PANEL);
+                dl->AddCircle(center, d * 0.5f, filled ? COL_INK : COL_BORDER_HI, 0, 1.75f * S);
+                ImGui::SetCursorScreenPos(ImVec2(x, center.y - d * 0.5f));
+                ImGui::PushID(group * 10 + i);
+                if (ImGui::InvisibleButton("pip", ImVec2(d, d))) {
+                    const int value = (have == i + 1) ? i : i + 1;
+                    if (success) act.setDeathSaves(ref, value, c.getDeathFailures());
+                    else act.setDeathSaves(ref, c.getDeathSuccesses(), value);
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", success ? "Death save successes" : "Death save failures");
+                ImGui::PopID();
+                x += d + gap;
+            }
+            x += 14 * S;
+        }
+        y += lineH + 18 * S;
+    }
+
+    // Actions for this combatant, with the current amount.
+    {
+        // Four in a row when they fit, otherwise two rows of two.
+        const float gap = 10 * S;
+        const float bh = 34 * S;
+        const int perRow = (x1 - x0) >= 520 * S ? 4 : 2;
+        const float bw = (x1 - x0 - gap * static_cast<float>(perRow - 1)) / static_cast<float>(perRow);
+        auto at = [&](int i) {
+            ImGui::SetCursorScreenPos(ImVec2(x0 + (bw + gap) * static_cast<float>(i % perRow),
+                                             y + (bh + gap) * static_cast<float>(i / perRow)));
+        };
+        at(0);
+        if (flatButton(("Damage " + amountLabel + "##spot").c_str(), ImVec2(bw, bh), BTN_RED)) act.damage(ref);
+        at(1);
+        if (flatButton(("Heal " + amountLabel + "##spot").c_str(), ImVec2(bw, bh), BTN_GREEN)) act.heal(ref);
+        at(2);
+        if (flatButton(("+" + amountLabel + " temp HP##spot").c_str(), ImVec2(bw, bh), BTN_TEMP)) act.temp(ref);
+        at(3);
+        if (flatButton("Edit...##spot", ImVec2(bw, bh), BTN_QUIET)) act.edit(ref);
+        y += (bh + gap) * static_cast<float>(4 / perRow) - gap + 16 * S;
+    }
+
+    // Status chips, then notes.
+    {
+        const std::vector<Chip> chips = cardChips(side, c, life, time);
+        if (!chips.empty()) {
+            drawChips(dl, ImVec2(x0, y), x1, chips, S);
+            y += 19 * S + 12 * S;
+        }
+        if (!c.getNotes().empty()) {
+            dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(x0, y), COL_MUTED, c.getNotes().c_str(), nullptr, x1 - x0);
+        }
+    }
+
+    ImGui::PopClipRect();
     ImGui::PopID();
 }
 
@@ -1424,6 +1596,10 @@ static void removeCombatant(Encounter& encounter, BoardState& board, CardRef ref
     if (board.turnValid && board.turn.side == ref.side) {
         if (board.turn.index == ref.index) board.turnValid = false;  // re-picked by the layout
         else if (board.turn.index > ref.index) board.turn.index--;
+    }
+    if (board.focusValid && board.focus.side == ref.side) {
+        if (board.focus.index == ref.index) board.focusValid = false;
+        else if (board.focus.index > ref.index) board.focus.index--;
     }
 }
 
@@ -1546,8 +1722,8 @@ static std::string savePath(const char* file) {
 
 // Version 2, one combatant per line in stacking order:
 //   P|name|maxHp|hp|x|y|temp|ac|speed|pp|level|cr|mod|conc|deathOk|deathFail|cond:rounds,...|notes
-// plus R|round, E|ended and T|index (whose turn it is, as an index into the lines
-// below). The x and y fields are no longer used (the order of the lines is the
+// plus R|round, E|ended, M|1 when in combat (absent: setup) and T|index (whose turn
+// it is, as an index into the lines below). The x and y fields are no longer used (the order of the lines is the
 // turn order) but are still written. Version 1 lines (P|name|maxHp|hp|x|y) still load;
 // older versions of the app ignore the T line.
 static std::string serializeBoard(const Encounter& encounter, const BoardState& board) {
@@ -1555,6 +1731,7 @@ static std::string serializeBoard(const Encounter& encounter, const BoardState& 
     out << "HPTRACKER 2\n";
     out << "R|" << board.round << "\n";
     out << "E|" << (encounter.isEndedManually() ? 1 : 0) << "\n";
+    if (board.inCombat) out << "M|1\n";
     if (board.turnValid) {
         for (size_t i = 0; i < board.z.size(); i++) {
             if (board.z[i] == board.turn) out << "T|" << i << "\n";
@@ -1590,6 +1767,10 @@ static bool deserializeBoard(const std::string& text, Encounter& encounter, Boar
         try {
             if (f.size() == 2 && f[0] == "T") {
                 pendingTurn = std::stoi(f[1]);
+                continue;
+            }
+            if (f.size() == 2 && f[0] == "M") {
+                board.inCombat = f[1] == "1";
                 continue;
             }
             if (f.size() == 2 && f[0] == "R") {
@@ -1846,8 +2027,9 @@ static bool alertExpired(const Alert& al, double now) {
     return alertOpacity(al, now) <= 0.0f;
 }
 
-// Alert toasts in the board's top-right corner. They fade away on their own;
-// clicking one fades it out early.
+// Alert toasts in the board's bottom-right corner, stacked upward above the
+// trash (newest at the bottom). They fade away on their own; clicking one fades
+// it out early.
 static void drawToasts(std::vector<Alert>& alerts, ImVec2 boardOrigin, ImVec2 boardSize, double now, float dt,
                        float S) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -1855,7 +2037,11 @@ static void drawToasts(std::vector<Alert>& alerts, ImVec2 boardOrigin, ImVec2 bo
     const float x1 = boardOrigin.x + boardSize.x - 22 * S;
     const float textW = tw - 46 * S;
     const float lineH = ImGui::GetTextLineHeight();
-    float target = 16 * S;
+    const float bottom = boardSize.y - 24 * S - 84 * S - 18 * S;  // just above the trash
+    const float gapY = 12 * S;
+    float total = 0.0f;
+    for (const Alert& al : alerts) total += ImGui::CalcTextSize(al.text.c_str(), nullptr, false, textW).y + 22 * S + gapY;
+    float target = bottom - total + gapY;
     for (Alert& al : alerts) {
         const ImVec2 ts = ImGui::CalcTextSize(al.text.c_str(), nullptr, false, textW);
         const float h = ts.y + 22 * S;
@@ -2111,58 +2297,62 @@ int main(int, char**) {
     bool openBoardMenu = false;  // right-click on empty space
     int boardMenuSlot = -1;      // Turn order slot under that right-click (-1 = at the end)
 
+    bool spotTurnValid = false;  // the turn the spotlight last followed
+    CardRef spotTurn{Side::Players, 0};
+
     auto isDefeated = [&](CardRef r) {
         const Creature* c = encounter.at(r.side, r.index);
         return c != nullptr && lifeOf(r.side, *c) == Life::Dead;
     };
-    // Keeps the turn marker valid: when nobody has it, the first card still standing
-    // gets it; when the card that holds it has been defeated, it moves on to the next
-    // one standing (the defeated card has left the Turn order, so a marker left on it
-    // would be invisible).
-    auto ensureTurn = [&]() {
-        const int n = static_cast<int>(board.z.size());
-        if (board.turnValid && !board.get(board.turn).wasDead) return;
-        int start = -1;
-        if (board.turnValid) {
-            for (int i = 0; i < n; i++) {
-                if (board.z[i] == board.turn) start = i;
-            }
+    auto indexInOrder = [&](CardRef r) {
+        for (size_t i = 0; i < board.z.size(); i++) {
+            if (board.z[i] == r) return static_cast<int>(i);
         }
-        for (int step = 1; step <= n; step++) {
-            const CardRef cand = board.z[((start + step) % n + n) % n];
-            if (!isDefeated(cand) && !board.get(cand).wasDead) {
-                const bool moved = board.turnValid;
-                board.turn = cand;
-                board.turnValid = true;
-                if (moved) {
-                    scrollToTurn = true;
-                    addLog("Turn: " + encounter.at(cand.side, cand.index)->getName(), COL_MUTED);
-                }
-                return;
-            }
-        }
+        return -1;
     };
-    // Passes the turn to the next combatant still standing, wrapping around.
-    // The round is not touched: rounds are ended by hand.
-    auto nextTurn = [&]() {
+    auto anyoneStanding = [&]() {
+        return std::any_of(board.z.begin(), board.z.end(), [&](CardRef r) { return !isDefeated(r); });
+    };
+    // A new round: timed conditions count down (with an alert for each one that ends).
+    auto beginNewRound = [&]() {
+        const std::vector<std::string> ended = encounter.tickConditions();
+        board.round++;
+        addLog("--- Round " + std::to_string(board.round) + " ---", COL_MUTED);
+        for (const std::string& line : ended) addAlert(line, COL_AMBER);
+    };
+    // Gives the turn to the next combatant standing after order index `start`
+    // (-1 = from the top). Going past the end of the order starts a new round.
+    // `skipFallen` also skips cards that are still playing their death animation.
+    auto passTurnFrom = [&](int start, bool skipFallen) {
         const int n = static_cast<int>(board.z.size());
-        if (n == 0) return;
-        int start = -1;
-        if (board.turnValid) {
-            for (int i = 0; i < n; i++) {
-                if (board.z[i] == board.turn) start = i;
-            }
-        }
         for (int step = 1; step <= n; step++) {
-            const CardRef cand = board.z[((start + step) % n + n) % n];
-            if (isDefeated(cand)) continue;
-            pushUndo();
+            const int idx = ((start + step) % n + n) % n;
+            const CardRef cand = board.z[idx];
+            if (isDefeated(cand) || (skipFallen && board.get(cand).wasDead)) continue;
+            if (start >= 0 && idx <= start) beginNewRound();
             board.turn = cand;
             board.turnValid = true;
             scrollToTurn = true;
             addLog("Turn: " + encounter.at(cand.side, cand.index)->getName(), COL_MUTED);
-            return;
+            return true;
         }
+        return false;
+    };
+    // In combat, keeps the turn marker valid: when nobody has it, the first card
+    // standing gets it; when the card that holds it has been defeated, the turn moves
+    // on by itself (the defeated card has left the Turn order, so a marker left on it
+    // would be invisible).
+    auto ensureTurn = [&]() {
+        if (!board.inCombat) return;
+        if (board.turnValid && !board.get(board.turn).wasDead) return;
+        passTurnFrom(board.turnValid ? indexInOrder(board.turn) : -1, true);
+    };
+    // Passes the turn to the next combatant still standing. After the last one, a new
+    // round starts (round counter up, timed conditions tick down).
+    auto nextTurn = [&]() {
+        if (!board.inCombat || !anyoneStanding()) return;
+        pushUndo();
+        passTurnFrom(board.turnValid ? indexInOrder(board.turn) : -1, false);
     };
     auto startTurnAt = [&](CardRef r) {
         pushUndo();
@@ -2170,6 +2360,79 @@ int main(int, char**) {
         board.turnValid = true;
         scrollToTurn = true;
         addLog("Turn: " + encounter.at(r.side, r.index)->getName(), COL_MUTED);
+    };
+    // Setup -> combat: round 1, the turn goes to the first card standing.
+    auto startCombat = [&]() {
+        if (!anyoneStanding()) return;
+        pushUndo();
+        board.inCombat = true;
+        board.round = 1;
+        board.turnValid = false;
+        encounter.resume();
+        clearSelection();
+        addLog("=== Combat started ===", COL_MUTED);
+        passTurnFrom(-1, false);
+    };
+    // Combat -> setup: the enemies leave; the party stays, with the HP it has now.
+    auto endCombat = [&]() {
+        pushUndo();
+        std::vector<CardRef> enemies;
+        for (int i = 0; i < static_cast<int>(board.creatures.size()); i++) enemies.push_back({Side::Creatures, i});
+        removeCombatants(encounter, board, enemies);
+        board.inCombat = false;
+        board.round = 1;
+        board.turnValid = false;
+        board.focusValid = false;
+        alerts.clear();
+        addLog("=== Combat ended ===", COL_MUTED);
+    };
+    // The panel in the spotlight's place before combat: what is set up, how to set
+    // it up, and the Start combat button.
+    auto drawSetupPanel = [&](ImVec2 a, ImVec2 b) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float pad = 22 * S;
+        const float x0 = a.x + pad, x1 = b.x - pad;
+        const float lineH = ImGui::GetTextLineHeight();
+        float y = a.y + pad;
+        const char* title = "Set up the encounter";
+        heavyText(dl, ImVec2(x0, y), COL_TEXT, title, 1.45f);
+        y += heavyTextSize(title, 1.45f).y + 14 * S;
+
+        int players = 0, enemies = 0;
+        std::vector<int> levels, xps;
+        for (const Creature& c : encounter.getPlayers()) {
+            players++;
+            levels.push_back(c.getLevel());
+        }
+        for (const Creature& c : encounter.getCreatures()) {
+            enemies++;
+            xps.push_back(crXp(c.getCrIndex()));
+        }
+        const std::string counts = std::to_string(players) + (players == 1 ? " player" : " players") + "   \xC2\xB7   " +
+                                   std::to_string(enemies) + (enemies == 1 ? " enemy" : " enemies");
+        boldText(dl, ImVec2(x0, y), COL_TEXT, counts.c_str());
+        y += lineH + 6 * S;
+        const DifficultyReport dr = rateEncounter(levels, xps);
+        const std::string diff = dr.valid ? std::string("Difficulty: ") + difficultyName(dr.rating) + "   \xC2\xB7   " +
+                                                std::to_string(dr.adjustedXp) + " adjusted XP"
+                                          : std::string("Difficulty: set player levels and monster CRs");
+        dl->AddText(ImVec2(x0, y), COL_MUTED, diff.c_str());
+        y += lineH + 20 * S;
+
+        const char* tips[] = {
+            "Right-click the list to add a new character, or a monster from the library.",
+            "Drag the cards into turn order: the top card acts first.",
+            "Double-click a card to edit it.",
+        };
+        for (const char* tip : tips) {
+            dl->AddCircleFilled(ImVec2(x0 + 4 * S, y + lineH * 0.5f), 3 * S, COL_INK);
+            dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(x0 + 16 * S, y), COL_TEXT, tip, nullptr, x1 - x0 - 16 * S);
+            y += ImGui::CalcTextSize(tip, nullptr, false, x1 - x0 - 16 * S).y + 10 * S;
+        }
+
+        const float bh = 46 * S;
+        ImGui::SetCursorScreenPos(ImVec2(x0, std::max(y + 10 * S, b.y - pad - bh)));
+        if (primaryButton("Start combat", ImVec2(x1 - x0, bh), anyoneStanding())) startCombat();
     };
     // Moves a card to slot `slot` of the Turn order (0 = first), among the cards that
     // are not defeated.
@@ -2311,7 +2574,7 @@ int main(int, char**) {
                     selectAll();
                 } else if (mod && ImGui::IsKeyPressed(ImGuiKey_D, false)) {
                     duplicate(selectedRefs());
-                } else if (ImGui::IsKeyPressed(ImGuiKey_Space, false) || ImGui::IsKeyPressed(ImGuiKey_RightArrow, false)) {
+                } else if (board.inCombat && (ImGui::IsKeyPressed(ImGuiKey_Space, false) || ImGui::IsKeyPressed(ImGuiKey_RightArrow, false))) {
                     nextTurn();
                 } else if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
                     clearSelection();
@@ -2382,7 +2645,7 @@ int main(int, char**) {
             const bool enemiesDown = !cs.empty() && std::all_of(cs.begin(), cs.end(), [](const Creature& c) { return c.getCurrentHp() == 0; });
             const bool partyDown = !ps.empty() && std::all_of(ps.begin(), ps.end(), [](const Creature& c) { return c.getCurrentHp() == 0; });
             const bool partyDead = partyDown && std::all_of(ps.begin(), ps.end(), [](const Creature& c) { return c.getDeathFailures() >= 3; });
-            if (encounter.isEndedManually()) pill("Encounter over", COL_GRAY, S);
+            if (!board.inCombat) pill("Setting up", COL_GRAY, S);
             else if (enemiesDown) pill("Enemies defeated", COL_GREEN, S);
             else if (partyDead) pill("Party defeated", COL_RED, S);
             else if (partyDown) pill("Party down!", COL_RED, S);
@@ -2534,29 +2797,26 @@ int main(int, char**) {
                 endSection();
 
                 // ---- Rounds.
-                beginSection("Turns & rounds");
-                {
+                if (board.inCombat) {
+                    beginSection("Combat", "round " + std::to_string(board.round));
                     if (primaryButton("Next turn", ImVec2(rowButtonWidth(1), 0))) nextTurn();
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Passes the turn to the next combatant (Space).");
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Passes the turn to the next combatant (Space).\nAfter the last one a new round starts.");
+                    }
                     const std::string turnName = board.turnValid && encounter.at(board.turn.side, board.turn.index)
                         ? encounter.at(board.turn.side, board.turn.index)->getName() : std::string("-");
                     ImGui::TextDisabled("Turn: %s", turnName.c_str());
-                    const float w2 = rowButtonWidth(2);
-                    if (primaryButton("End round", ImVec2(w2, 0))) {
-                        pushUndo();
-                        const std::vector<std::string> ended = encounter.tickConditions();
-                        board.round++;
-                        addLog("--- Round " + std::to_string(board.round) + " ---", COL_MUTED);
-                        for (const std::string& line : ended) addAlert(line, COL_AMBER);
-                    }
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Counts down timed conditions by one round.");
-                    ImGui::SameLine(0, 10 * S);
-                    if (quietButton("Reset to 1", ImVec2(w2, 0))) {
-                        pushUndo();
-                        board.round = 1;
-                    }
+                    if (dangerButton("End combat", ImVec2(rowButtonWidth(1), 0))) endCombat();
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The enemies leave; the party stays, with the HP it has now.");
+                    endSection();
+                } else {
+                    beginSection("Combat", "setup");
+                    if (primaryButton("Start combat", ImVec2(rowButtonWidth(1), 0), anyoneStanding())) startCombat();
+                    ImGui::PushTextWrapPos(0);
+                    ImGui::TextDisabled("Add characters with a right-click on the board and drag them into turn order.");
+                    ImGui::PopTextWrapPos();
+                    endSection();
                 }
-                endSection();
 
                 // ---- Board view.
                 beginSection("Board");
@@ -2574,19 +2834,9 @@ int main(int, char**) {
                 beginSection("Encounter");
                 {
                     const float w2 = rowButtonWidth(2);
-                    if (encounter.isEndedManually()) {
-                        if (greenButton("Resume", ImVec2(w2, 0))) {
-                            pushUndo();
-                            encounter.resume();
-                            addLog("Encounter resumed", COL_MUTED);
-                        }
-                    } else if (dangerButton("End encounter", ImVec2(w2, 0))) {
-                        pushUndo();
-                        encounter.endManually();
-                        addLog("Encounter ended", COL_MUTED);
+                    if (!board.inCombat) {
+                        if (quietButton("New encounter...", ImVec2(rowButtonWidth(1), 0))) openNewEncounter = true;
                     }
-                    ImGui::SameLine(0, 10 * S);
-                    if (primaryButton("New encounter", ImVec2(w2, 0))) openNewEncounter = true;
 
                     if (quietButton("Save", ImVec2(w2, 0))) {
                         statusMsg = writeFile(path, snapshot()) ? "Saved." : "Could not save.";
@@ -2740,16 +2990,19 @@ int main(int, char**) {
                                   mouse.x >= boardOrigin.x && mouse.x <= boardOrigin.x + boardSize.x &&
                                   mouse.y >= boardOrigin.y && mouse.y <= boardOrigin.y + boardSize.y;
 
-        // ---- Columns: Turn order (left) and Defeated (right), in board coordinates.
+        // ---- Layout, in board coordinates: the Turn order list on the left; on the
+        // right the spotlight (one card shown big, or the setup panel) above Defeated.
         const float colMargin = 16 * S, colGap = 14 * S, colHeader = 44 * S, colPad = 10 * S;
         const float trashSize = 84 * S;
-        const float turnColW = std::max(220 * S, std::floor((boardSize.x - 2 * colMargin - colGap) * 0.62f));
-        const float defColW = std::max(150 * S, boardSize.x - 2 * colMargin - colGap - turnColW);
-        const ImVec2 colMin[2] = {ImVec2(colMargin, colMargin),
-                                  ImVec2(colMargin + turnColW + colGap, colMargin)};
+        const float turnColW = std::clamp(std::floor((boardSize.x - 2 * colMargin - colGap) * 0.47f), 320 * S, 520 * S);
+        const float rightX = colMargin + turnColW + colGap;
+        const float rightW = std::max(220 * S, boardSize.x - colMargin - rightX);
+        const float spotH = std::clamp(std::floor(boardSize.y * 0.52f), 300 * S, 430 * S);
+        const ImVec2 spotMin(rightX, colMargin), spotMax(rightX + rightW, colMargin + spotH);
+        const ImVec2 colMin[2] = {ImVec2(colMargin, colMargin), ImVec2(rightX, colMargin + spotH + colGap)};
         const ImVec2 colMax[2] = {ImVec2(colMargin + turnColW, boardSize.y - colMargin),
-                                  ImVec2(colMargin + turnColW + colGap + defColW,
-                                         std::max(colMargin + colHeader + 60 * S, boardSize.y - colMargin - trashSize - 18 * S))};
+                                  ImVec2(std::max(rightX + 160 * S, boardSize.x - 24 * S - trashSize - 14 * S),
+                                         std::max(colMargin + spotH + colGap + colHeader + 40 * S, boardSize.y - colMargin))};
         // Area the cards live in (screen coordinates); a little extra on top for the turn ribbon.
         ImVec2 areaMin[2], areaMax[2];
         for (int col = 0; col < 2; col++) {
@@ -2757,7 +3010,7 @@ int main(int, char**) {
             areaMax[col] = boardOrigin + ImVec2(colMax[col].x - colPad, colMax[col].y - colPad);
         }
         const float cardH = cardHeight();
-        const float slotH = cardH + 14 * S;
+        const float slotH = cardH + 11 * S;
 
         // Trash drop zone (bottom-right). Releasing a dragged card over it deletes it.
         const ImVec2 trashMin(boardOrigin.x + boardSize.x - trashSize - 24 * S,
@@ -2791,6 +3044,13 @@ int main(int, char**) {
         }
 
         ensureTurn();
+        // The spotlight follows the turn whenever it moves (and can be pointed at any card by clicking it).
+        if (board.inCombat && board.turnValid && !(spotTurnValid && spotTurn == board.turn)) {
+            board.focus = board.turn;
+            board.focusValid = true;
+        }
+        spotTurn = board.turn;
+        spotTurnValid = board.inCombat && board.turnValid;
         std::vector<CardRef> colList[2];
         for (const CardRef& r : board.z) {
             CardState& st = board.get(r);
@@ -2855,8 +3115,8 @@ int main(int, char**) {
                 st.size = ImVec2(cardW, cardH);
                 const bool isDragged = dragging && r == dragRef;
                 if (!isDragged && col == 0 && gapSlot >= 0 && slot == gapSlot) slot++;  // leave the gap open
-                const bool holdsTurn = col == 0 && board.turnValid && r == board.turn;
-                const float stepForward = holdsTurn ? 10.0f * S * easeOutCubic(st.turnAnim) : 0.0f;
+                const bool holdsTurn = board.inCombat && col == 0 && board.turnValid && r == board.turn;
+                const float stepForward = holdsTurn ? 8.0f * S * easeOutCubic(st.turnAnim) : 0.0f;
                 st.target = ImVec2(colMin[col].x + colPad + 2 * S + stepForward,
                                    colMin[col].y + colHeader + static_cast<float>(slot) * slotH - board.scroll[col]);
                 if (!isDragged) slot++;
@@ -2918,7 +3178,7 @@ int main(int, char**) {
                 dl->AddText(ImVec2(a.x + 16 * S + ts.x + 8 * S, a.y + 12 * S + (ts.y - ImGui::GetTextLineHeight()) * 0.5f),
                             COL_MUTED, count.c_str());
                 if (col == 0) {
-                    const std::string roundText = "Round " + std::to_string(board.round);
+                    const std::string roundText = board.inCombat ? "Round " + std::to_string(board.round) : std::string("Setup");
                     const ImVec2 rs = boldTextSize(roundText.c_str(), 0.95f);
                     boldText(dl, ImVec2(b.x - 16 * S - rs.x, a.y + 12 * S + (ts.y - rs.y) * 0.5f), COL_MUTED,
                              roundText.c_str(), 0.95f);
@@ -2938,14 +3198,15 @@ int main(int, char**) {
                     dl->AddRectFilled(ImVec2(x1 - 4 * S, y0), ImVec2(x1, y0 + thumbH), COL_BORDER_HI, 2 * S);
                 }
             }
+            inkBox(dl, boardOrigin + spotMin, boardOrigin + spotMax, 18 * S, S, COL_PANEL, 3.0f);
             // The gap a dragged card would drop into.
             if (gapSlot >= 0) {
                 const float gy = boardOrigin.y + colMin[0].y + colHeader + static_cast<float>(gapSlot) * slotH - board.scroll[0];
                 const ImVec2 a(boardOrigin.x + colMin[0].x + colPad + 2 * S, gy);
                 const ImVec2 b(a.x + board.get(dragRef).size.x, gy + cardH);
                 dl->PushClipRect(ImVec2(areaMin[0].x - 4 * S, areaMin[0].y), ImVec2(areaMax[0].x + 10 * S, areaMax[0].y), true);
-                dl->AddRectFilled(a, b, withAlpha(COL_INK, 14), 14 * S);
-                dl->AddRect(a, b, withAlpha(COL_INK, 70), 14 * S, 0, 1.5f * S);
+                dl->AddRectFilled(a, b, withAlpha(COL_INK, 14), 12 * S);
+                dl->AddRect(a, b, withAlpha(COL_INK, 70), 12 * S, 0, 1.5f * S);
                 dl->PopClipRect();
             }
         }
@@ -3022,6 +3283,18 @@ int main(int, char**) {
             if (f >= 3) addAlert(c->getName() + " has died", COL_RED);
         };
         actions.nextTurn = [&]() { nextTurn(); };
+        actions.temp = [&](CardRef r) {
+            pushUndo();
+            applyTemp(r, actionAmount);
+        };
+        actions.edit = [&](CardRef r) {
+            editRef = r;
+            editCopy = *encounter.at(r.side, r.index);
+            std::snprintf(editName, sizeof(editName), "%s", editCopy->getName().c_str());
+            std::snprintf(editNotes, sizeof(editNotes), "%s", editCopy->getNotes().c_str());
+            editCustomCond[0] = '\0';
+            openEdit = true;
+        };
 
         // Draw order: Turn order cards, Defeated cards, then the dragged card on top.
         std::vector<CardRef> drawOrder;
@@ -3043,10 +3316,11 @@ int main(int, char**) {
             const CardRef r = drawOrder[k];
             CardState& st = board.get(r);
             const bool isDraggedCard = dragging && r == dragRef;
-            const bool holdsTurn = st.column == 0 && board.turnValid && r == board.turn;
+            const bool holdsTurn = board.inCombat && st.column == 0 && board.turnValid && r == board.turn;
+            const bool isFocus = board.inCombat && board.focusValid && r == board.focus;
             if (!isDraggedCard) ImGui::PushClipRect(st.clipMin, st.clipMax, true);
             drawToken(encounter, r, st, boardOrigin, amountLabel,
-                      !covered && !marqueeActive && !mouseOverToast, holdsTurn, actions);
+                      !covered && !marqueeActive && !mouseOverToast, holdsTurn, isFocus, actions);
             if (!isDraggedCard) ImGui::PopClipRect();
         }
         // Effects (floating numbers, crit bursts) always sit above every card.
@@ -3060,7 +3334,24 @@ int main(int, char**) {
             }
         }
 
-        // Clicks select; double-clicks open the editor.
+        // ---- Spotlight: the focused card in combat, or the setup panel before it.
+        {
+            const ImVec2 a = boardOrigin + spotMin, b = boardOrigin + spotMax;
+            if (board.inCombat) {
+                if (board.focusValid && encounter.at(board.focus.side, board.focus.index)) {
+                    const bool holdsTurn = board.turnValid && board.focus == board.turn;
+                    drawSpotlight(encounter, board.focus, board.get(board.focus), a, b, amountLabel, holdsTurn, actions);
+                } else {
+                    const char* hint = "Click a card to see it here";
+                    const ImVec2 hs = ImGui::CalcTextSize(hint);
+                    ImGui::GetWindowDrawList()->AddText(ImVec2((a.x + b.x - hs.x) * 0.5f, (a.y + b.y - hs.y) * 0.5f), COL_MUTED, hint);
+                }
+            } else {
+                drawSetupPanel(a, b);
+            }
+        }
+
+        // Clicks select (and point the spotlight at the card); double-clicks open the editor.
         for (const CardRef& r : board.z) {
             CardState& st = board.get(r);
             if (st.pressed && !shiftLike && !st.selected) {
@@ -3074,6 +3365,8 @@ int main(int, char**) {
                     clearSelection();
                     st.selected = true;
                 }
+                board.focus = r;
+                board.focusValid = true;
             }
             if (st.wantsEdit) {
                 editRef = r;
@@ -3147,7 +3440,7 @@ int main(int, char**) {
                 const bool many = sel.size() > 1;
                 ImGui::TextDisabled("%s", many ? (std::to_string(sel.size()) + " selected").c_str() : c->getName().c_str());
                 ImGui::Separator();
-                if (!many && ImGui::MenuItem("Start turn here")) startTurnAt(menuRef);
+                if (!many && board.inCombat && ImGui::MenuItem("Start turn here")) startTurnAt(menuRef);
                 if (!many && ImGui::MenuItem("Edit...")) {
                     editRef = menuRef;
                     editCopy = *c;

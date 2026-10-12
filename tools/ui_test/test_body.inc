@@ -53,7 +53,10 @@
                 static auto alertNamed = [&](const std::string& t) -> const Alert* { for (auto& a : alerts) if (a.text == t) return &a; return nullptr; };
                 static auto waitSeconds = [&](double sec) { steps.push_back({1, [&, sec]() { holdUntil = ImGui::GetTime() + sec; }}); };
 
-                act(10, [&]() { g_shot = "01_default"; });
+                act(10, [&]() { check(!board.inCombat, "the app starts in setup"); g_shot = "00_setup"; });
+                clickAt([=]() { return rectCenter("Start combat"); });
+                act(30, [&]() { check(board.inCombat && board.round == 1 && board.turnValid && board.turn == findRef("Hero"), "Start combat: round 1, the turn goes to the first card");
+                                g_shot = "01_default"; });
                 // 1) Card damage with a plain amount
                 setAmount(3);
                 clickAt([=]() { return dmgPt("Goblin"); });
@@ -109,18 +112,18 @@
                 act(2, [&]() { check(C("Hero")->getDeathFailures() == 1 && alertHas("death save failure (1/3)"), "hit at 0 HP = death save failure 1/3"); });
                 clickAt([=]() { return pipPt("Hero", 0, 0); });
                 act(2, [&]() { check(C("Hero")->getDeathSuccesses() == 1, "clicking a success pip sets 1 success"); });
-                // 9) Conditions on the Orc via the sidebar, then End round
+                // 9) Conditions on the Orc via the sidebar, then the round ends by passing the last turn
                 clickAt([=]() { return bodyPt("Orc"); });
                 act(3, [&]() { selCondition = 10; selRounds = 1; g_scrollTo = "Apply condition"; });
                 clickAt([=]() { return rectCenter("Apply condition"); });
                 act(1, [&]() { selCondition = 11; selRounds = 0; });
                 clickAt([=]() { return rectCenter("Apply condition"); });
                 act(1, [&]() { check(C("Orc")->hasCondition("Poisoned") && C("Orc")->hasCondition("Prone"), "Poisoned (1 round) and Prone applied to Orc"); C("Orc")->setNotes("Carries the key"); C("Orc")->setDamageMod(DamageMod::Resistant); });
-                act(40, [&]() { g_shot = "04_states"; g_scrollTo = "End round"; });
-                act(3, [&]() {});
-                clickAt([=]() { return rectCenter("End round"); });
+                act(40, [&]() { g_shot = "04_states"; g_scrollTo = "Next turn"; });
+                act(3, [&]() { startTurnAt(findRef("Orc")); });  // the last card in the order
+                clickAt([=]() { return rectCenter("Next turn"); });
                 act(2, [&]() { g_scrollTo.clear(); g_shot = "04b_toasts"; });
-                act(2, [&]() { check(board.round == 2 && !C("Orc")->hasCondition("Poisoned") && C("Orc")->hasCondition("Prone") && alertHas("Orc: Poisoned ended"), "End round: round 2, Poisoned expired with alert, Prone stays"); });
+                act(2, [&]() { check(board.round == 2 && !C("Orc")->hasCondition("Poisoned") && C("Orc")->hasCondition("Prone") && alertHas("Orc: Poisoned ended"), "Next turn past the last card: round 2, Poisoned expired with alert, Prone stays"); });
                 // clicking a toast fades it away quickly, without reaching the cards under it
                 static std::string clickedText;
                 static size_t selBefore = 0;
@@ -204,6 +207,7 @@
                     addCombatant(encounter, board, Side::Creatures, b, ImVec2(0, 0));
                     addCombatant(encounter, board, Side::Creatures, c, ImVec2(0, 0));
                     addCombatant(encounter, board, Side::Players, d, ImVec2(0, 0));
+                    startCombat();
                 });
                 act(30, [&]() { g_scrollTo = "Next turn"; });
                 act(2, [&]() { check(turnIs("Aria"), "the first combatant standing holds the turn"); g_shot = "13_turns"; });
@@ -213,7 +217,7 @@
                 clickAt([=]() { return rectCenter("Next turn"); });
                 act(2, [&]() { check(turnIs("Dax"), "Next turn x3 reaches Dax"); });
                 clickAt([=]() { return rectCenter("Next turn"); });
-                act(2, [&]() { check(turnIs("Aria") && board.round == 1, "Next turn wraps around to Aria, round still 1"); });
+                act(2, [&]() { check(turnIs("Aria") && board.round == 2, "Next turn wraps around to Aria and starts round 2"); });
                 steps.push_back({1, [=]() { key(true, SDLK_SPACE, SDL_SCANCODE_SPACE, 0); }});
                 steps.push_back({3, [=]() { key(false, SDLK_SPACE, SDL_SCANCODE_SPACE, 0); }});
                 act(2, [&]() { check(turnIs("Bram"), "Space also passes the turn"); });
@@ -268,7 +272,7 @@
                     // A save from the old free board (no T line) still loads.
                     Encounter e3; BoardState b3;
                     check(deserializeBoard("HPTRACKER 2\nR|3\nE|0\nP|Old|10|10|120.5|40.0|0|10|30|10|1|-1|0|0|0|0||\nC|Gob|7|7|300|80|0|12|30|9|1|2|0|0|0|0||\n", e3, b3)
-                          && b3.z.size() == 2 && b3.round == 3 && !b3.turnValid, "saves from the free board still load");
+                          && b3.z.size() == 2 && b3.round == 3 && !b3.turnValid && !b3.inCombat, "saves from the free board still load (in setup)");
                 });
                 // Right-click on empty space opens the board menu.
                 act(1, [&]() { CardState& last = CS("Dax"); dragTo = ImVec2(last.drawPos.x + last.size.x * 0.5f, last.drawPos.y + last.size.y + 24 * s); });
@@ -282,8 +286,13 @@
                 act(4, [&]() { g_shot = "17_new_character"; });
                 clickAt([=]() { return rectCenter("Create"); });
                 act(3, [&]() { check(exists("Zed") && zIndex("Zed") == 1 && CS("Zed").selected, "New character creates the card at the chosen slot"); });
-                act(70, [&]() { g_scrollTo.clear(); clearSelection(); motion(g_boardOrigin.x + g_boardSize.x - 60 * s, g_boardOrigin.y + g_boardSize.y * 0.5f); });
+                act(70, [&]() { g_scrollTo = "End combat"; clearSelection(); motion(g_boardOrigin.x + g_boardSize.x - 60 * s, g_boardOrigin.y + g_boardSize.y * 0.5f); });
                 act(1, [&]() { g_shot = "18_final"; });
+                clickAt([=]() { return rectCenter("End combat"); });
+                act(20, [&]() { check(!board.inCombat && encounter.getCreatures().empty() && exists("Aria") && exists("Dax") && C("Dax")->getCurrentHp() == 0,
+                                      "End combat: enemies leave, the party stays as it is, back to setup"); g_scrollTo.clear(); });
+                act(40, [&]() { motion(g_boardOrigin.x + g_boardSize.x - 60 * s, g_boardOrigin.y + g_boardSize.y * 0.5f); });
+                act(1, [&]() { g_shot = "19_setup_again"; });
 
                 // 19) Alerts fade out on their own
                 act(2, [&]() { addAlert("Fade test", COL_AMBER); });
