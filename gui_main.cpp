@@ -488,6 +488,11 @@ static bool violetButton(const char* label, ImVec2 size = ImVec2(0, 0), bool ena
     return flatButton(label, size, BTN_VIOLET, enabled);
 }
 
+// Width of an ImGui::SmallButton with a one-character label ("+", "x"), border included.
+static float smallButtonWidth() {
+    return ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 2.0f + 2.0f * UI_SCALE;
+}
+
 // Width for `count` buttons sharing the current row.
 static float rowButtonWidth(int count) {
     const float S = UI_SCALE;
@@ -2691,6 +2696,11 @@ int main(int, char**) {
         ImGui_ImplSDLRenderer2_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
+        // The bold and heavy faces are only drawn through ImDrawList::AddText and are
+        // never made the current font, so ImGui doesn't hand them the screen's pixel
+        // density: they would be rasterized at 1x and stretched (blurry on Retina).
+        if (g_fontBold) g_fontBold->CurrentRasterizerDensity = ImGui::GetPixelDensity();
+        if (g_fontHeavy) g_fontHeavy->CurrentRasterizerDensity = ImGui::GetPixelDensity();
 
         const bool anyPopup = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 
@@ -3008,21 +3018,20 @@ int main(int, char**) {
                     ImGui::PopTextWrapPos();
                 } else {
                     int removeMember = -1;
-                    if (ImGui::BeginTable("party", 4, ImGuiTableFlags_BordersInnerH)) {
+                    // Name with its details below it (the sidebar is too narrow for a details column).
+                    if (ImGui::BeginTable("party", 3, ImGuiTableFlags_BordersInnerH)) {
                         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-                        ImGui::TableSetupColumn("Info", ImGuiTableColumnFlags_WidthFixed, 112 * S);
-                        ImGui::TableSetupColumn("Add", ImGuiTableColumnFlags_WidthFixed, 26 * S);
-                        ImGui::TableSetupColumn("Del", ImGuiTableColumnFlags_WidthFixed, 22 * S);
+                        ImGui::TableSetupColumn("Add", ImGuiTableColumnFlags_WidthFixed, std::max(smallButtonWidth(), ImGui::CalcTextSize("in").x));
+                        ImGui::TableSetupColumn("Del", ImGuiTableColumnFlags_WidthFixed, smallButtonWidth());
                         for (int i = 0; i < static_cast<int>(party.size()); i++) {
                             const PlayerTemplate t = party[i];
                             ImGui::PushID(i);
                             ImGui::TableNextRow();
                             ImGui::TableNextColumn();
-                            ImGui::AlignTextToFramePadding();
                             ImGui::TextUnformatted(t.name.c_str());
-                            ImGui::TableNextColumn();
-                            ImGui::AlignTextToFramePadding();
-                            ImGui::TextDisabled("Lv %d  %dhp  AC%d", t.level, t.maxHp, t.ac);
+                            ImGui::PushFont(nullptr, ImGui::GetCurrentContext()->FontSizeBase * 0.88f);
+                            ImGui::TextDisabled("Lv %d \xC2\xB7 %d HP \xC2\xB7 AC %d", t.level, t.maxHp, t.ac);
+                            ImGui::PopFont();
                             ImGui::TableNextColumn();
                             if (onBoard(t.name)) {
                                 ImGui::AlignTextToFramePadding();
@@ -3062,11 +3071,10 @@ int main(int, char**) {
                 std::string filter = libraryFilter;
                 std::transform(filter.begin(), filter.end(), filter.begin(), ::tolower);
                 int removeIndex = -1;
-                if (ImGui::BeginTable("library", 4, ImGuiTableFlags_BordersInnerH)) {
+                if (ImGui::BeginTable("library", 3, ImGuiTableFlags_BordersInnerH)) {
                     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-                    ImGui::TableSetupColumn("Info", ImGuiTableColumnFlags_WidthFixed, 92 * S);
-                    ImGui::TableSetupColumn("Add", ImGuiTableColumnFlags_WidthFixed, 26 * S);
-                    ImGui::TableSetupColumn("Del", ImGuiTableColumnFlags_WidthFixed, 22 * S);
+                    ImGui::TableSetupColumn("Add", ImGuiTableColumnFlags_WidthFixed, smallButtonWidth());
+                    ImGui::TableSetupColumn("Del", ImGuiTableColumnFlags_WidthFixed, smallButtonWidth());
                     for (int i = 0; i < static_cast<int>(library.size()); i++) {
                         const MonsterTemplate& t = library[i];
                         std::string lower = t.name;
@@ -3075,11 +3083,10 @@ int main(int, char**) {
                         ImGui::PushID(i);
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
-                        ImGui::AlignTextToFramePadding();
                         ImGui::TextUnformatted(t.name.c_str());
-                        ImGui::TableNextColumn();
-                        ImGui::AlignTextToFramePadding();
-                        ImGui::TextDisabled("%dhp AC%d CR%s", t.maxHp, t.ac, crLabel(t.cr));
+                        ImGui::PushFont(nullptr, ImGui::GetCurrentContext()->FontSizeBase * 0.88f);
+                        ImGui::TextDisabled("%d HP \xC2\xB7 AC %d \xC2\xB7 CR %s", t.maxHp, t.ac, crLabel(t.cr));
+                        ImGui::PopFont();
                         ImGui::TableNextColumn();
                         if (ImGui::SmallButton("+")) addFromTemplate(t, Side::Creatures, libraryCount);
                         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add %d", libraryCount);
