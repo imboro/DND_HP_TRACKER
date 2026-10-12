@@ -39,6 +39,9 @@ private:
     bool concentrating = false;
     std::vector<Condition> conditions;
     std::string notes;
+    // Look on the board: palette color and icon (indexes); -1 = the default for its side.
+    int color = -1;
+    int icon = -1;
 
     int deathSuccesses = 0;
     int deathFailures = 0;
@@ -72,6 +75,8 @@ public:
     void setDamageMod(DamageMod mod) { damageMod = mod; }
     void setConcentrating(bool value) { concentrating = value; }
     void setNotes(std::string value) { notes = std::move(value); }
+    void setColor(int value) { color = value; }
+    void setIcon(int value) { icon = value; }
 
     // Death saves (players at 0 HP). Values are clamped to 0..3.
     void setDeathSaves(int successes, int failures);
@@ -101,6 +106,8 @@ public:
     bool isConcentrating() const { return concentrating; }
     const std::vector<Condition>& getConditions() const { return conditions; }
     const std::string& getNotes() const { return notes; }
+    int getColor() const { return color; }
+    int getIcon() const { return icon; }
     int getDeathSuccesses() const { return deathSuccesses; }
     int getDeathFailures() const { return deathFailures; }
 };

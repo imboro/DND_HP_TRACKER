@@ -235,6 +235,10 @@ If the creature drops to 0 HP, concentration ends automatically and you're told.
 **Double-click** a card, or right-click > **Edit...**. You can change:
 
 - Name, max HP, current HP, temp HP
+- **Look:** the card's color (10 colors) and icon (heart, bolt, shield, sword, skull,
+  star, flame, paw, d20, crown, moon, eye). **Default** keeps blue with a heart for
+  players and red with a bolt for enemies. The color shows on the icon, on a strip
+  down the card's left edge and in the spotlight.
 - Damage response: Normal / Resistant / Vulnerable / Immune
 - AC, speed, passive Perception
 - **Level** (players) or **CR** (enemies). These drive the difficulty rating.
@@ -248,12 +252,14 @@ If the creature drops to 0 HP, concentration ends automatically and you're told.
 
 Right-click any card for:
 
+- Start turn here (in combat)
 - Edit
 - Duplicate
 - Concentrating
+- **Color** and **Icon**
 - Damage type
 - Conditions
-- **Save to library**
+- **Save to party** (players) or **Save to library** (enemies)
 - Delete
 
 With several cards selected, the menu acts on all of them.
@@ -266,7 +272,8 @@ With several cards selected, the menu acts on all of them.
 
 Right-click on empty space in a column:
 
-- **New character...** opens a small window: name, **Player** or **Creature**, Max HP
+- **New character...** opens a small window: name, **Player** or **Creature**, its
+  color and icon, Max HP
   and AC, plus Level (players) or CR (creatures), **How many**, and (for creatures) a
   checkbox to also save it to the monster library. Press **Create** or Enter.
 - **Add from library** lists the monsters of the library; one click adds one.
@@ -291,7 +298,8 @@ the **Library** tab) with their name, level, max HP, AC, speed and passive Perce
   right-click menu adds just one, in the slot under the cursor.
 - **x** removes a player from the party (not from the board).
 
-The party is stored in `party.txt`, next to the monster library.
+The party is stored in `party.txt`, next to the monster library. Both keep each
+card's color and icon.
 
 ### Monster library
 

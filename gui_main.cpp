@@ -654,6 +654,200 @@ static void drawCrossPartial(ImDrawList* dl, ImVec2 o, float s, float thick, ImU
     stroke(0.75f, 0.25f, 0.25f, 0.75f, std::min(t2, 1.0f));
 }
 
+// ---- Card looks: palette colors and icons ---------------------------------------
+
+struct PaletteColor {
+    const char* name;
+    ImU32 col;
+};
+// Index 0 is the players' default and 1 the enemies' default.
+static const PaletteColor PALETTE[] = {
+    {"Blue", IM_COL32(59, 130, 246, 255)},   {"Red", IM_COL32(226, 72, 60, 255)},
+    {"Green", IM_COL32(46, 164, 79, 255)},   {"Amber", IM_COL32(222, 150, 20, 255)},
+    {"Purple", IM_COL32(139, 92, 246, 255)}, {"Pink", IM_COL32(219, 39, 119, 255)},
+    {"Teal", IM_COL32(13, 148, 136, 255)},   {"Orange", IM_COL32(234, 108, 20, 255)},
+    {"Brown", IM_COL32(146, 95, 50, 255)},   {"Slate", IM_COL32(71, 85, 105, 255)},
+};
+static const int PALETTE_COUNT = sizeof(PALETTE) / sizeof(PALETTE[0]);
+
+// Index 0 is the players' default and 1 the enemies' default.
+static const char* const ICON_NAMES[] = {"Heart", "Bolt", "Shield", "Sword", "Skull", "Star",
+                                         "Flame", "Paw",  "D20",    "Crown", "Moon",  "Eye"};
+static const int ICON_COUNT = sizeof(ICON_NAMES) / sizeof(ICON_NAMES[0]);
+
+static int colorIndexFor(Side side, int color) {
+    return (color >= 0 && color < PALETTE_COUNT) ? color : (side == Side::Players ? 0 : 1);
+}
+static int iconIndexFor(Side side, int icon) {
+    return (icon >= 0 && icon < ICON_COUNT) ? icon : (side == Side::Players ? 0 : 1);
+}
+static ImU32 creatureColor(Side side, const Creature& c) {
+    return PALETTE[colorIndexFor(side, c.getColor())].col;
+}
+
+// Draws icon `icon` (an index into ICON_NAMES) as a line glyph in the box [o, o + s].
+static void drawIcon(ImDrawList* dl, int icon, ImVec2 o, float s, float thick, ImU32 col) {
+    auto P = [&](float x, float y) { return ImVec2(o.x + x * s, o.y + y * s); };
+    switch (icon) {
+        case 0: drawHeart(dl, o, s, thick, col); break;
+        case 1: drawBolt(dl, o, s, thick, col); break;
+        case 2: {  // shield
+            ImVec2 pts[] = {P(0.18f, 0.14f), P(0.82f, 0.14f), P(0.82f, 0.48f), P(0.5f, 0.9f), P(0.18f, 0.48f)};
+            dl->AddPolyline(pts, 5, col, ImDrawFlags_Closed, thick);
+            dl->AddLine(P(0.5f, 0.26f), P(0.5f, 0.72f), col, thick);
+            break;
+        }
+        case 3: {  // sword
+            dl->AddLine(P(0.3f, 0.7f), P(0.84f, 0.16f), col, thick);
+            dl->AddLine(P(0.84f, 0.16f), P(0.86f, 0.14f), col, thick);
+            dl->AddLine(P(0.2f, 0.56f), P(0.44f, 0.8f), col, thick);
+            dl->AddLine(P(0.3f, 0.7f), P(0.13f, 0.87f), col, thick);
+            break;
+        }
+        case 4: {  // skull
+            dl->AddCircle(P(0.5f, 0.42f), 0.3f * s, col, 0, thick);
+            dl->AddRect(P(0.36f, 0.64f), P(0.64f, 0.86f), col, 0.06f * s, 0, thick);
+            dl->AddCircleFilled(P(0.39f, 0.44f), 0.075f * s, col);
+            dl->AddCircleFilled(P(0.61f, 0.44f), 0.075f * s, col);
+            break;
+        }
+        case 5: {  // star
+            ImVec2 pts[10];
+            for (int i = 0; i < 10; i++) {
+                const float r = (i % 2 == 0) ? 0.42f : 0.18f;
+                const float a = -1.5707963f + static_cast<float>(i) * 0.6283185f;
+                pts[i] = P(0.5f + std::cos(a) * r, 0.54f + std::sin(a) * r);
+            }
+            dl->AddPolyline(pts, 10, col, ImDrawFlags_Closed, thick);
+            break;
+        }
+        case 6: {  // flame
+            dl->PathLineTo(P(0.5f, 0.08f));
+            dl->PathBezierCubicCurveTo(P(0.7f, 0.3f), P(0.86f, 0.5f), P(0.7f, 0.76f));
+            dl->PathBezierCubicCurveTo(P(0.62f, 0.92f), P(0.38f, 0.92f), P(0.3f, 0.76f));
+            dl->PathBezierCubicCurveTo(P(0.14f, 0.5f), P(0.3f, 0.3f), P(0.5f, 0.08f));
+            dl->PathStroke(col, ImDrawFlags_Closed, thick);
+            dl->PathLineTo(P(0.5f, 0.5f));
+            dl->PathBezierCubicCurveTo(P(0.62f, 0.62f), P(0.6f, 0.8f), P(0.5f, 0.82f));
+            dl->PathBezierCubicCurveTo(P(0.4f, 0.8f), P(0.38f, 0.62f), P(0.5f, 0.5f));
+            dl->PathStroke(col, ImDrawFlags_Closed, thick * 0.8f);
+            break;
+        }
+        case 7: {  // paw
+            dl->AddCircle(P(0.5f, 0.66f), 0.17f * s, col, 0, thick);
+            dl->AddCircle(P(0.22f, 0.42f), 0.08f * s, col, 0, thick);
+            dl->AddCircle(P(0.39f, 0.25f), 0.08f * s, col, 0, thick);
+            dl->AddCircle(P(0.61f, 0.25f), 0.08f * s, col, 0, thick);
+            dl->AddCircle(P(0.78f, 0.42f), 0.08f * s, col, 0, thick);
+            break;
+        }
+        case 8: {  // d20
+            ImVec2 hex[] = {P(0.5f, 0.07f), P(0.87f, 0.29f), P(0.87f, 0.71f), P(0.5f, 0.93f), P(0.13f, 0.71f), P(0.13f, 0.29f)};
+            dl->AddPolyline(hex, 6, col, ImDrawFlags_Closed, thick);
+            ImVec2 tri[] = {P(0.5f, 0.3f), P(0.71f, 0.64f), P(0.29f, 0.64f)};
+            dl->AddPolyline(tri, 3, col, ImDrawFlags_Closed, thick * 0.85f);
+            dl->AddLine(tri[0], hex[0], col, thick * 0.85f);
+            dl->AddLine(tri[1], hex[2], col, thick * 0.85f);
+            dl->AddLine(tri[2], hex[4], col, thick * 0.85f);
+            break;
+        }
+        case 9: {  // crown
+            ImVec2 pts[] = {P(0.13f, 0.76f), P(0.13f, 0.3f), P(0.33f, 0.52f), P(0.5f, 0.22f),
+                            P(0.67f, 0.52f), P(0.87f, 0.3f), P(0.87f, 0.76f)};
+            dl->AddPolyline(pts, 7, col, ImDrawFlags_Closed, thick);
+            break;
+        }
+        case 10: {  // moon
+            dl->PathArcTo(P(0.5f, 0.5f), 0.38f * s, 0.35f * 3.1415927f, 1.65f * 3.1415927f, 20);
+            dl->PathArcTo(P(0.66f, 0.46f), 0.3f * s, 1.45f * 3.1415927f, 0.55f * 3.1415927f, 16);
+            dl->PathStroke(col, ImDrawFlags_Closed, thick);
+            break;
+        }
+        default: {  // eye
+            dl->PathLineTo(P(0.08f, 0.5f));
+            dl->PathBezierCubicCurveTo(P(0.32f, 0.16f), P(0.68f, 0.16f), P(0.92f, 0.5f));
+            dl->PathBezierCubicCurveTo(P(0.68f, 0.84f), P(0.32f, 0.84f), P(0.08f, 0.5f));
+            dl->PathStroke(col, ImDrawFlags_Closed, thick);
+            dl->AddCircle(P(0.5f, 0.5f), 0.17f * s, col, 0, thick);
+            dl->AddCircleFilled(P(0.5f, 0.5f), 0.08f * s, col);
+            break;
+        }
+    }
+}
+
+static void drawCreatureIcon(ImDrawList* dl, Side side, const Creature& c, ImVec2 o, float s, float thick, ImU32 col) {
+    drawIcon(dl, iconIndexFor(side, c.getIcon()), o, s, thick, col);
+}
+
+// Color swatches and icon tiles for picking a card's look (-1 = the default for its
+// side). Lays itself out in fixed rows so it works in auto-sized windows. Returns
+// true when something changed.
+static bool lookPicker(int* color, int* icon, Side side, float S) {
+    bool changed = false;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 shown = PALETTE[colorIndexFor(side, *color)].col;
+
+    // Colors: "default" first, then the palette, in one row.
+    ImGui::TextDisabled("Color");
+    {
+        const float d = 24 * S, gap = 7 * S;
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        for (int i = -1; i < PALETTE_COUNT; i++) {
+            const ImVec2 a(start.x + static_cast<float>(i + 1) * (d + gap), start.y);
+            const ImVec2 c(a.x + d * 0.5f, a.y + d * 0.5f);
+            ImGui::SetCursorScreenPos(a);
+            ImGui::PushID(i + 100);
+            if (ImGui::InvisibleButton("swatch", ImVec2(d, d))) {
+                *color = i;
+                changed = true;
+            }
+            const bool hovered = ImGui::IsItemHovered();
+            if (hovered) ImGui::SetTooltip("%s", i < 0 ? "Default" : PALETTE[i].name);
+            ImGui::PopID();
+            const ImU32 fill = i < 0 ? PALETTE[side == Side::Players ? 0 : 1].col : PALETTE[i].col;
+            dl->AddCircleFilled(c, d * 0.5f - 2 * S, fill);
+            if (i < 0) {  // "default": a white slash marks it
+                dl->AddLine(ImVec2(c.x - d * 0.22f, c.y + d * 0.22f), ImVec2(c.x + d * 0.22f, c.y - d * 0.22f), COL_WHITE, 2.0f * S);
+            }
+            if (*color == i) dl->AddCircle(c, d * 0.5f + 1.5f * S, COL_INK, 0, 2.5f * S);
+            else if (hovered) dl->AddCircle(c, d * 0.5f + 1.5f * S, COL_BORDER_HI, 0, 1.5f * S);
+        }
+        ImGui::SetCursorScreenPos(start);
+        ImGui::Dummy(ImVec2(static_cast<float>(PALETTE_COUNT + 1) * (d + gap), d));
+    }
+
+    // Icons: "default" first, then the set, seven per row, drawn in the chosen color.
+    ImGui::TextDisabled("Icon");
+    {
+        const float t = 36 * S, gap = 7 * S;
+        const int perRow = 7;
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        int rows = 0;
+        for (int i = -1; i < ICON_COUNT; i++) {
+            const int k = i + 1;
+            const ImVec2 a(start.x + static_cast<float>(k % perRow) * (t + gap), start.y + static_cast<float>(k / perRow) * (t + gap));
+            rows = k / perRow + 1;
+            ImGui::SetCursorScreenPos(a);
+            ImGui::PushID(i + 200);
+            if (ImGui::InvisibleButton("icon", ImVec2(t, t))) {
+                *icon = i;
+                changed = true;
+            }
+            const bool hovered = ImGui::IsItemHovered();
+            if (hovered) ImGui::SetTooltip("%s", i < 0 ? "Default" : ICON_NAMES[i]);
+            ImGui::PopID();
+            const bool on = *icon == i;
+            dl->AddRectFilled(a, a + ImVec2(t, t), on ? withAlpha(shown, 40) : (hovered ? COL_RAISED_HI : COL_TRACK), 9 * S);
+            if (on) dl->AddRect(a, a + ImVec2(t, t), COL_INK, 9 * S, 0, 2.0f * S);
+            const int glyph = i < 0 ? (side == Side::Players ? 0 : 1) : i;
+            drawIcon(dl, glyph, a + ImVec2(t * 0.17f, t * 0.17f), t * 0.66f, 2.0f * S, i < 0 ? COL_MUTED : shown);
+        }
+        ImGui::SetCursorScreenPos(start);
+        ImGui::Dummy(ImVec2(static_cast<float>(perRow) * (t + gap), static_cast<float>(rows) * (t + gap) - gap));
+    }
+    return changed;
+}
+
 // Fades in (k: 0 -> 1) and shifts every vertex added to `dl` since index
 // `start`: a cheap way to animate a whole group of shapes and widgets at once.
 // Colors blend toward the background behind the group instead of becoming
@@ -1123,7 +1317,7 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     const ImVec2 pEnd(p.x + size.x, p.y + size.y);
     st.drawPos = p;
 
-    const ImU32 sideColor = side == Side::Players ? COL_PLAYER : COL_RED;
+    const ImU32 sideColor = creatureColor(side, c);
     const ImU32 accent = mixColor(sideColor, COL_GRAY, deadK);
 
     // Hover state of the drag handle is known from the previous frame via the
@@ -1170,11 +1364,13 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
             dl->AddRectFilled(p, pEnd, withAlpha(flash, static_cast<int>((st.crit ? 110 : 55) * k)), round);
         }
     }
+    // A strip of the card's color down its left edge.
+    dl->AddRectFilled(p, ImVec2(p.x + 6 * S, pEnd.y), fadeAlpha(accent, 0.85f), round, ImDrawFlags_RoundCornersLeft);
     dl->AddRect(p, pEnd, outlineCol, round, 0, outline);
 
     // Left: icon tile with a line glyph in the side's color.
     const float iconSize = 32 * S;
-    const ImVec2 iconMin(p.x + pad, p.y + (size.y - iconSize) * 0.5f);
+    const ImVec2 iconMin(p.x + pad + 4 * S, p.y + (size.y - iconSize) * 0.5f);
     const ImVec2 iconMax(iconMin.x + iconSize, iconMin.y + iconSize);
     dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, 30), 9 * S);
     const ImVec2 glyphOrigin(iconMin.x + iconSize * 0.15f, iconMin.y + iconSize * 0.15f);
@@ -1182,8 +1378,7 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     // On death the heart/bolt fades out while a cross is drawn over it stroke by stroke.
     const float oldGlyph = showDead ? 1.0f - clamp01(st.deathT / 0.2f) : 1.0f;
     if (oldGlyph > 0.0f) {
-        if (side == Side::Players) drawHeart(dl, glyphOrigin, glyphSize, 2.2f * S, fadeAlpha(accent, oldGlyph));
-        else drawBolt(dl, glyphOrigin, glyphSize, 2.2f * S, fadeAlpha(accent, oldGlyph));
+        drawCreatureIcon(dl, side, c, glyphOrigin, glyphSize, 2.2f * S, fadeAlpha(accent, oldGlyph));
     }
     if (showDead) {
         drawCrossPartial(dl, glyphOrigin, glyphSize, 2.2f * S, accent, easeOutCubic(clamp01(st.deathT / 0.16f)),
@@ -1398,7 +1593,7 @@ static void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st
     const bool dead = life == Life::Dead;
     const float time = static_cast<float>(ImGui::GetTime());
     const float lineH = ImGui::GetTextLineHeight();
-    const ImU32 accent = dead ? COL_GRAY : (side == Side::Players ? COL_PLAYER : COL_RED);
+    const ImU32 accent = dead ? COL_GRAY : creatureColor(side, c);
     const float x0 = a.x + pad, x1 = b.x - pad;
     float y = a.y + pad;
 
@@ -1412,8 +1607,7 @@ static void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st
         dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, 30), 12 * S);
         const ImVec2 go(iconMin.x + icon * 0.15f, iconMin.y + icon * 0.15f);
         if (dead) drawCross(dl, go, icon * 0.7f, 2.8f * S, accent);
-        else if (side == Side::Players) drawHeart(dl, go, icon * 0.7f, 2.8f * S, accent);
-        else drawBolt(dl, go, icon * 0.7f, 2.8f * S, accent);
+        else drawCreatureIcon(dl, side, c, go, icon * 0.7f, 2.8f * S, accent);
 
         std::string what = side == Side::Players ? "Player  \xC2\xB7  Level " + std::to_string(c.getLevel()) : "Enemy";
         if (side == Side::Creatures && c.getCrIndex() >= 0) {
@@ -1728,7 +1922,8 @@ static std::string savePath(const char* file) {
 // Version 2, one combatant per line in stacking order:
 //   P|name|maxHp|hp|x|y|temp|ac|speed|pp|level|cr|mod|conc|deathOk|deathFail|cond:rounds,...|notes
 // plus R|round, E|ended, M|1 when in combat (absent: setup) and T|index (whose turn
-// it is, as an index into the lines below). The x and y fields are no longer used (the order of the lines is the
+// it is, as an index into the lines below). A|color|icon after a combatant's line
+// sets its look (palette and icon indexes, -1 = default). The x and y fields are no longer used (the order of the lines is the
 // turn order) but are still written. Version 1 lines (P|name|maxHp|hp|x|y) still load;
 // older versions of the app ignore the T line.
 static std::string serializeBoard(const Encounter& encounter, const BoardState& board) {
@@ -1755,6 +1950,7 @@ static std::string serializeBoard(const Encounter& encounter, const BoardState& 
             << c.getCrIndex() << '|' << static_cast<int>(c.getDamageMod()) << '|' << (c.isConcentrating() ? 1 : 0)
             << '|' << c.getDeathSuccesses() << '|' << c.getDeathFailures() << '|' << conds << '|'
             << esc(c.getNotes()) << '\n';
+        if (c.getColor() >= 0 || c.getIcon() >= 0) out << "A|" << c.getColor() << '|' << c.getIcon() << '\n';
     }
     return out.str();
 }
@@ -1767,6 +1963,7 @@ static bool deserializeBoard(const std::string& text, Encounter& encounter, Boar
     encounter.clear();
     board = BoardState();
     int pendingTurn = -1;
+    CardRef lastAdded{Side::Players, -1};
     while (std::getline(in, line)) {
         const std::vector<std::string> f = splitRaw(line, '|');
         try {
@@ -1776,6 +1973,16 @@ static bool deserializeBoard(const std::string& text, Encounter& encounter, Boar
             }
             if (f.size() == 2 && f[0] == "M") {
                 board.inCombat = f[1] == "1";
+                continue;
+            }
+            if (f.size() == 3 && f[0] == "A") {
+                if (lastAdded.index >= 0) {
+                    Creature* last = encounter.at(lastAdded.side, lastAdded.index);
+                    if (last) {
+                        last->setColor(std::clamp(std::stoi(f[1]), -1, 99));
+                        last->setIcon(std::clamp(std::stoi(f[2]), -1, 99));
+                    }
+                }
                 continue;
             }
             if (f.size() == 2 && f[0] == "R") {
@@ -1809,7 +2016,7 @@ static bool deserializeBoard(const std::string& text, Encounter& encounter, Boar
                 }
                 c.setNotes(unesc(f[17]));
             }
-            addCombatant(encounter, board, f[0] == "P" ? Side::Players : Side::Creatures, std::move(c), pos);
+            lastAdded = addCombatant(encounter, board, f[0] == "P" ? Side::Players : Side::Creatures, std::move(c), pos);
         } catch (const std::exception&) {
             continue;  // skip malformed line
         }
@@ -1854,6 +2061,8 @@ struct MonsterTemplate {
     int pp = 10;
     int cr = -1;
     DamageMod mod = DamageMod::Normal;
+    int color = -1;  // look (palette / icon index), -1 = default
+    int icon = -1;
 };
 
 static std::vector<MonsterTemplate> defaultLibrary() {
@@ -1882,6 +2091,7 @@ static std::string serializeLibrary(const std::vector<MonsterTemplate>& lib) {
     for (const MonsterTemplate& t : lib) {
         out << "T|" << esc(t.name) << '|' << t.maxHp << '|' << t.ac << '|' << t.speed << '|' << t.pp << '|'
             << t.cr << '|' << static_cast<int>(t.mod) << '\n';
+        if (t.color >= 0 || t.icon >= 0) out << "S|" << t.color << '|' << t.icon << '\n';  // look; older versions skip it
     }
     return out.str();
 }
@@ -1893,6 +2103,14 @@ static bool deserializeLibrary(const std::string& text, std::vector<MonsterTempl
     lib.clear();
     while (std::getline(in, line)) {
         const std::vector<std::string> f = splitRaw(line, '|');
+        if (f.size() == 3 && f[0] == "S" && !lib.empty()) {
+            try {
+                lib.back().color = std::stoi(f[1]);
+                lib.back().icon = std::stoi(f[2]);
+            } catch (const std::exception&) {
+            }
+            continue;
+        }
         if (f.size() != 8 || f[0] != "T") continue;
         try {
             MonsterTemplate t;
@@ -1918,6 +2136,8 @@ static Creature creatureFromTemplate(const MonsterTemplate& t) {
     c.setPassivePerception(t.pp);
     c.setCrIndex(t.cr);
     c.setDamageMod(t.mod);
+    c.setColor(t.color);
+    c.setIcon(t.icon);
     return c;
 }
 
@@ -1930,6 +2150,8 @@ struct PlayerTemplate {
     int speed = 30;
     int pp = 10;
     int level = 1;
+    int color = -1;  // look (palette / icon index), -1 = default
+    int icon = -1;
 };
 
 // One player per line: P|name|maxHp|ac|speed|pp|level
@@ -1939,6 +2161,7 @@ static std::string serializeParty(const std::vector<PlayerTemplate>& party) {
     for (const PlayerTemplate& t : party) {
         out << "P|" << esc(t.name) << '|' << t.maxHp << '|' << t.ac << '|' << t.speed << '|' << t.pp << '|'
             << t.level << '\n';
+        if (t.color >= 0 || t.icon >= 0) out << "S|" << t.color << '|' << t.icon << '\n';
     }
     return out.str();
 }
@@ -1950,6 +2173,14 @@ static bool deserializeParty(const std::string& text, std::vector<PlayerTemplate
     party.clear();
     while (std::getline(in, line)) {
         const std::vector<std::string> f = splitRaw(line, '|');
+        if (f.size() == 3 && f[0] == "S" && !party.empty()) {
+            try {
+                party.back().color = std::stoi(f[1]);
+                party.back().icon = std::stoi(f[2]);
+            } catch (const std::exception&) {
+            }
+            continue;
+        }
         if (f.size() != 7 || f[0] != "P") continue;
         try {
             PlayerTemplate t;
@@ -1974,6 +2205,8 @@ static Creature creatureFromPlayer(const PlayerTemplate& t) {
     c.setSpeed(t.speed);
     c.setPassivePerception(t.pp);
     c.setLevel(t.level);
+    c.setColor(t.color);
+    c.setIcon(t.icon);
     return c;
 }
 
@@ -1985,6 +2218,8 @@ static PlayerTemplate playerFromCreature(const Creature& c) {
     t.speed = c.getSpeed();
     t.pp = c.getPassivePerception();
     t.level = c.getLevel();
+    t.color = c.getColor();
+    t.icon = c.getIcon();
     return t;
 }
 
@@ -2656,6 +2891,8 @@ int main(int, char**) {
     int newCharSlot = -1;         // Turn order slot to insert the new cards at (-1 = end)
     bool newSaveLib = false;      // also save a new creature to the monster library
     bool newSaveParty = true;     // also save a new player to the party
+    int newColor = -1;            // look of the new character (-1 = default)
+    int newIcon = -1;
 
     // ---- Board interaction state
     bool marqueeActive = false;
@@ -3645,6 +3882,35 @@ int main(int, char**) {
                     const bool value = !c->isConcentrating();
                     for (CardRef r : sel) encounter.at(r.side, r.index)->setConcentrating(value);
                 }
+                // Look: a swatch / glyph is drawn in the blank space at the start of each item.
+                if (ImGui::BeginMenu("Color")) {
+                    for (int i = -1; i < PALETTE_COUNT; i++) {
+                        const std::string label = std::string("      ") + (i < 0 ? "Default" : PALETTE[i].name);
+                        if (ImGui::MenuItem(label.c_str(), nullptr, c->getColor() == i)) {
+                            pushUndo();
+                            for (CardRef r : sel) encounter.at(r.side, r.index)->setColor(i);
+                        }
+                        const ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+                        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(mn.x + 10 * S, (mn.y + mx.y) * 0.5f), 6 * S,
+                                                                    PALETTE[colorIndexFor(menuRef.side, i)].col);
+                    }
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Icon")) {
+                    const ImU32 shown = creatureColor(menuRef.side, *c);
+                    for (int i = -1; i < ICON_COUNT; i++) {
+                        const std::string label = std::string("      ") + (i < 0 ? "Default" : ICON_NAMES[i]);
+                        if (ImGui::MenuItem(label.c_str(), nullptr, c->getIcon() == i)) {
+                            pushUndo();
+                            for (CardRef r : sel) encounter.at(r.side, r.index)->setIcon(i);
+                        }
+                        const ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+                        const float g = 17 * S;
+                        drawIcon(ImGui::GetWindowDrawList(), iconIndexFor(menuRef.side, i), ImVec2(mn.x + 2 * S, (mn.y + mx.y - g) * 0.5f), g,
+                                 1.6f * S, i < 0 ? COL_MUTED : shown);
+                    }
+                    ImGui::EndMenu();
+                }
                 if (ImGui::BeginMenu("Damage type")) {
                     for (int m = 0; m < 4; m++) {
                         const DamageMod mod = static_cast<DamageMod>(m);
@@ -3679,6 +3945,8 @@ int main(int, char**) {
                     t.speed = c->getSpeed();
                     t.pp = c->getPassivePerception();
                     t.cr = c->getCrIndex();
+                    t.color = c->getColor();
+                    t.icon = c->getIcon();
                     t.mod = c->getDamageMod();
                     library.push_back(t);
                     saveLibrary();
@@ -3702,6 +3970,8 @@ int main(int, char**) {
                 newCharFocus = true;
                 newCharSlot = boardMenuSlot;
                 newName[0] = '\0';
+                newColor = -1;
+                newIcon = -1;
             }
             {
                 const std::vector<PlayerTemplate> missing = partyMissing();
@@ -3765,6 +4035,7 @@ int main(int, char**) {
             ImGui::RadioButton("Player", &newSide, 0);
             ImGui::SameLine();
             ImGui::RadioButton("Creature", &newSide, 1);
+            lookPicker(&newColor, &newIcon, newSide == 0 ? Side::Players : Side::Creatures, S);
             ImGui::SetNextItemWidth(fieldW);
             ImGui::InputInt("Max HP", &newMaxHp);
             newMaxHp = std::max(1, newMaxHp);
@@ -3800,6 +4071,8 @@ int main(int, char**) {
                 for (size_t i = 0; i < names.size(); i++) {
                     Creature c(names[i], newMaxHp);
                     c.setAc(newAc);
+                    c.setColor(newColor);
+                    c.setIcon(newIcon);
                     if (side == Side::Players) c.setLevel(newLevel);
                     else c.setCrIndex(newCr);
                     const CardRef r = addCombatant(encounter, board, side, c, spawnPos());
@@ -3814,6 +4087,8 @@ int main(int, char**) {
                     t.maxHp = newMaxHp;
                     t.ac = newAc;
                     t.cr = newCr;
+                    t.color = newColor;
+                    t.icon = newIcon;
                     library.push_back(t);
                     saveLibrary();
                     statusMsg = std::string("Saved ") + newName + " to the library.";
@@ -3822,6 +4097,8 @@ int main(int, char**) {
                     Creature saved(newName, newMaxHp);
                     saved.setAc(newAc);
                     saved.setLevel(newLevel);
+                    saved.setColor(newColor);
+                    saved.setIcon(newIcon);
                     saveToParty(saved);
                 }
                 if (newCharSlot >= 0) {
@@ -3868,6 +4145,15 @@ int main(int, char**) {
                 ImGui::TextDisabled("%s", isPlayer ? "Player" : "Enemy");
                 ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 70 * S);
                 ImGui::InputText("Name", editName, sizeof(editName));
+
+                ImGui::SeparatorText("Look");
+                {
+                    int color = e.getColor(), icon = e.getIcon();
+                    if (lookPicker(&color, &icon, editRef.side, S)) {
+                        e.setColor(color);
+                        e.setIcon(icon);
+                    }
+                }
 
                 ImGui::SeparatorText("Hit points");
                 intField("Max HP", e.getMaxHp(), 1, 99999, [&](int v) { e.setMaxHp(v); });

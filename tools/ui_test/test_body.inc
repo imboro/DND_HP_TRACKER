@@ -311,6 +311,32 @@
                     g_forceTab = 1; });
                 act(30, [&]() { g_shot = "20_party"; });
                 act(2, [&]() { g_forceTab = 0; });
+                // 18c) Card looks: color and icon, kept by the save file and both libraries
+                act(2, [&]() {
+                    C("Aria")->setColor(4); C("Aria")->setIcon(8);
+                    C("Dax")->setColor(6); C("Dax")->setIcon(2);
+                    const std::string text = serializeBoard(encounter, board);
+                    Encounter e2; BoardState b2;
+                    bool kept = deserializeBoard(text, e2, b2) && serializeBoard(e2, b2) == text;
+                    for (const Creature& c : e2.getPlayers()) if (c.getName() == "Aria") kept = kept && c.getColor() == 4 && c.getIcon() == 8;
+                    check(kept, "card looks survive save and load");
+                    MonsterTemplate t; t.name = "Imp"; t.color = 5; t.icon = 6;
+                    std::vector<MonsterTemplate> lib{t}, lib2;
+                    check(deserializeLibrary(serializeLibrary(lib), lib2) && lib2.size() == 1 && lib2[0].color == 5 && lib2[0].icon == 6, "the monster library keeps looks");
+                    saveToParty(*C("Aria"));
+                    std::vector<PlayerTemplate> p2;
+                    check(deserializeParty(serializeParty(party), p2) && p2[0].color == 4 && p2[0].icon == 8, "the party keeps looks");
+                    std::vector<MonsterTemplate> lib3;
+                    check(deserializeLibrary("HPLIBRARY 1\nT|Old|7|15|30|9|2|0\n", lib3) && lib3.size() == 1 && lib3[0].color == -1, "libraries without looks still load");
+                    startCombat();
+                });
+                act(40, [&]() { motion(g_boardOrigin.x + g_boardSize.x - 60 * s, g_boardOrigin.y + g_boardSize.y * 0.5f); });
+                act(1, [&]() { g_shot = "21_looks"; });
+                act(2, [&]() { const CardRef r = findRef("Aria"); editRef = r; editCopy = *C("Aria");
+                               std::snprintf(editName, sizeof(editName), "%s", editCopy->getName().c_str()); editNotes[0] = '\0'; openEdit = true; });
+                act(20, [&]() { g_shot = "22_look_picker"; });
+                act(3, [&]() { key(true, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
+                act(3, [&]() { key(false, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
 
                 // 19) Alerts fade out on their own
                 act(2, [&]() { addAlert("Fade test", COL_AMBER); });
