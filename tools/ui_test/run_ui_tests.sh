@@ -14,7 +14,7 @@ export PATH="$HOME/homebrew/bin:$PATH"
 
 mkdir -p "$OUT"
 cd "$ROOT"
-rm -f "$OUT"/gui_test "$OUT"/test_save.txt "$OUT"/test_library.txt "$OUT"/test_settings.txt "$OUT"/*.bmp "$OUT"/*.png
+rm -f "$OUT"/gui_test "$OUT"/test_save.txt "$OUT"/test_library.txt "$OUT"/test_settings.txt "$OUT"/test_party.txt "$OUT"/*.bmp "$OUT"/*.png
 
 python3 "$HERE/make_harness.py" gui_main.cpp "$HERE/test_body.inc" "$OUT/gui_test.cpp" "$OUT"
 

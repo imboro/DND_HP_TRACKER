@@ -43,7 +43,9 @@ agreed on, and the tracker follows it.
 2. On first launch you get a sample Hero, Goblin and Orc. Delete them by dragging
    them onto the trash can, or use **New encounter > Remove everything**.
 3. **Set up:** right-click the list and choose **New character...** to add your party
-   and monsters (or **Add from library**). Drag the cards into turn order.
+   and monsters (or **Add from library**). Drag the cards into turn order. Tick
+   **Also save to the party** for your players: next time **Add the party** brings
+   them all back in one click.
 4. Press **Start combat**. Type an amount (e.g. `8`) in the **Amount** box and press
    **-** (damage) or **+** (heal) on a card, or the big buttons in the spotlight.
    Press **Next turn** (or Space) to pass the turn; after the last card a new round
@@ -70,7 +72,7 @@ Everything autosaves, so closing the app never loses the fight.
   - Before combat: Start combat. In combat: Next turn, the round, End combat.
   - Card size.
   - Encounter controls, save/load and undo/redo.
-- **Library** tab: the monster library.
+- **Library** tab: your saved party and the monster library.
 - **Log** tab: everything that happened, round by round.
 
 **Right: the board**
@@ -276,6 +278,21 @@ If a plain "Goblin" is already on the board, it's renamed "Goblin 1" and the new
 ones continue from there. **Duplicate** (Cmd+D) numbers copies the same way.
 Copies start fresh: full HP, no conditions, no temp HP.
 
+### The party
+
+Your players fight every combat, so you can save them once in the **Party** (top of
+the **Library** tab) with their name, level, max HP, AC, speed and passive Perception.
+
+- **Save a player:** right-click a player's card > **Save to party**, or tick
+  **Also save to the party** in New character (on by default for players). Saving a
+  player whose name is already in the party updates it, e.g. after a level up.
+- **Add the party:** brings every saved player who isn't on the board, at full HP
+  (Library tab, the setup panel, or right-click the board). **Add from party** in the
+  right-click menu adds just one, in the slot under the cursor.
+- **x** removes a player from the party (not from the board).
+
+The party is stored in `party.txt`, next to the monster library.
+
 ### Monster library
 
 The library lists ready-made monsters (Goblin, Orc, Wolf, Ogre, Troll …) with HP,
@@ -383,6 +400,7 @@ Files are stored in `~/Library/Application Support/HotelWorkshop/HPTracker/`:
 |---|---|
 | `encounter.txt` | The current encounter (plain text, one creature per line) |
 | `library.txt` | Your monster library |
+| `party.txt` | Your saved party |
 | `settings.txt` | Card size |
 
 ---

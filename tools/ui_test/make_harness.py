@@ -34,6 +34,7 @@ rep('segmentedTabs(TAB_LABELS, 3, &activeTab, S);',
 rep('const std::string path = savePath("encounter.txt");', 'const std::string path = "%s/test_save.txt";' % scratch)
 rep('const std::string settingsPath = savePath("settings.txt");', 'const std::string settingsPath = "%s/test_settings.txt";' % scratch)
 rep('const std::string libraryPath = savePath("library.txt");', 'const std::string libraryPath = "%s/test_library.txt";' % scratch)
+rep('const std::string partyPath = savePath("party.txt");', 'const std::string partyPath = "%s/test_party.txt";' % scratch)
 rep('        const ImVec2 boardSize = ImGui::GetContentRegionAvail();\n',
     '        const ImVec2 boardSize = ImGui::GetContentRegionAvail();\n        g_boardOrigin = boardOrigin;\n        g_boardSize = boardSize;\n        g_lineH = ImGui::GetTextLineHeight();\n')
 rep('        if (ImGui::GetTime() - lastAutosave > 3.0) {', body + '\n        if (ImGui::GetTime() - lastAutosave > 3.0) {')

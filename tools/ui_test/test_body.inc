@@ -293,6 +293,24 @@
                                       "End combat: enemies leave, the party stays as it is, back to setup"); g_scrollTo.clear(); });
                 act(40, [&]() { motion(g_boardOrigin.x + g_boardSize.x - 60 * s, g_boardOrigin.y + g_boardSize.y * 0.5f); });
                 act(1, [&]() { g_shot = "19_setup_again"; });
+                // 18b) The party: save players once (updated by name), bring the missing ones back
+                act(2, [&]() {
+                    saveToParty(*C("Aria")); saveToParty(*C("Dax"));
+                    C("Aria")->setLevel(5); saveToParty(*C("Aria"));
+                    check(party.size() == 2 && party[0].name == "Aria" && party[0].level == 5, "Save to party stores each player once, updated by name");
+                    const std::string text = serializeParty(party);
+                    std::vector<PlayerTemplate> p2;
+                    check(deserializeParty(text, p2) && p2.size() == 2 && p2[1].name == "Dax", "the party file round-trips");
+                });
+                act(2, [&]() { deleteRefs({findRef("Aria")}, false); });
+                act(30, [&]() { check(!exists("Aria") && partyMissing().size() == 1, "Aria is missing from the board"); });
+                clickAt([=]() { return rectCenter("Add the party (1)##setup"); });
+                act(30, [&]() {
+                    check(exists("Aria") && C("Aria")->getCurrentHp() == C("Aria")->getMaxHp() && C("Aria")->getLevel() == 5 && !exists("Dax 1"),
+                          "Add the party brings back only the missing player, at full HP");
+                    g_forceTab = 1; });
+                act(30, [&]() { g_shot = "20_party"; });
+                act(2, [&]() { g_forceTab = 0; });
 
                 // 19) Alerts fade out on their own
                 act(2, [&]() { addAlert("Fade test", COL_AMBER); });

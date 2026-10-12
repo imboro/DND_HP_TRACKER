@@ -1916,6 +1916,73 @@ static Creature creatureFromTemplate(const MonsterTemplate& t) {
     return c;
 }
 
+// ---- Party (the players who fight every combat) -------------------------------
+
+struct PlayerTemplate {
+    std::string name;
+    int maxHp = 20;
+    int ac = 12;
+    int speed = 30;
+    int pp = 10;
+    int level = 1;
+};
+
+// One player per line: P|name|maxHp|ac|speed|pp|level
+static std::string serializeParty(const std::vector<PlayerTemplate>& party) {
+    std::ostringstream out;
+    out << "HPPARTY 1\n";
+    for (const PlayerTemplate& t : party) {
+        out << "P|" << esc(t.name) << '|' << t.maxHp << '|' << t.ac << '|' << t.speed << '|' << t.pp << '|'
+            << t.level << '\n';
+    }
+    return out.str();
+}
+
+static bool deserializeParty(const std::string& text, std::vector<PlayerTemplate>& party) {
+    std::istringstream in(text);
+    std::string line;
+    if (!std::getline(in, line) || line.rfind("HPPARTY", 0) != 0) return false;
+    party.clear();
+    while (std::getline(in, line)) {
+        const std::vector<std::string> f = splitRaw(line, '|');
+        if (f.size() != 7 || f[0] != "P") continue;
+        try {
+            PlayerTemplate t;
+            t.name = unesc(f[1]);
+            t.maxHp = std::max(1, std::stoi(f[2]));
+            t.ac = std::stoi(f[3]);
+            t.speed = std::stoi(f[4]);
+            t.pp = std::stoi(f[5]);
+            t.level = std::clamp(std::stoi(f[6]), 1, 20);
+            party.push_back(t);
+        } catch (const std::exception&) {
+            continue;
+        }
+    }
+    return true;
+}
+
+// A fresh player from the party: full HP, no conditions.
+static Creature creatureFromPlayer(const PlayerTemplate& t) {
+    Creature c(t.name, t.maxHp);
+    c.setAc(t.ac);
+    c.setSpeed(t.speed);
+    c.setPassivePerception(t.pp);
+    c.setLevel(t.level);
+    return c;
+}
+
+static PlayerTemplate playerFromCreature(const Creature& c) {
+    PlayerTemplate t;
+    t.name = c.getName();
+    t.maxHp = c.getMaxHp();
+    t.ac = c.getAc();
+    t.speed = c.getSpeed();
+    t.pp = c.getPassivePerception();
+    t.level = c.getLevel();
+    return t;
+}
+
 // ---- Board decoration ----------------------------------------------------------
 
 static void drawTrash(ImVec2 min, float size, bool dragging, bool hot, int count, float time, float S) {
@@ -2154,6 +2221,13 @@ int main(int, char**) {
         }
     }
     auto saveLibrary = [&]() { writeFile(libraryPath, serializeLibrary(library)); };
+    const std::string partyPath = savePath("party.txt");
+    std::vector<PlayerTemplate> party;
+    {
+        std::string text;
+        if (readFile(partyPath, text)) deserializeParty(text, party);
+    }
+    auto saveParty = [&]() { writeFile(partyPath, serializeParty(party)); };
 
     // View settings (not part of the encounter, so undo doesn't touch them).
     const std::string settingsPath = savePath("settings.txt");
@@ -2361,6 +2435,52 @@ int main(int, char**) {
         scrollToTurn = true;
         addLog("Turn: " + encounter.at(r.side, r.index)->getName(), COL_MUTED);
     };
+    // ---- Party
+    auto onBoard = [&](const std::string& name) {
+        for (const Creature& c : encounter.getPlayers()) {
+            if (c.getName() == name) return true;
+        }
+        return false;
+    };
+    // Saves a player to the party, or updates the saved one with the same name.
+    auto saveToParty = [&](const Creature& c) {
+        const PlayerTemplate t = playerFromCreature(c);
+        const auto it = std::find_if(party.begin(), party.end(), [&](const PlayerTemplate& p) { return p.name == t.name; });
+        if (it != party.end()) *it = t;
+        else party.push_back(t);
+        saveParty();
+        statusMsg = "Saved " + t.name + " to the party.";
+    };
+    auto partyMissing = [&]() {
+        std::vector<PlayerTemplate> out;
+        for (const PlayerTemplate& t : party) {
+            if (!onBoard(t.name)) out.push_back(t);
+        }
+        return out;
+    };
+    // Adds party members (full HP) at the end of the turn order, skipping anyone
+    // who is already on the board. One undo step for the whole group.
+    auto addPartyMembers = [&](const std::vector<PlayerTemplate>& members) {
+        std::vector<CardRef> added;
+        std::vector<PlayerTemplate> todo;
+        for (const PlayerTemplate& t : members) {
+            if (!onBoard(t.name)) todo.push_back(t);
+        }
+        if (todo.empty()) return added;
+        pushUndo();
+        clearSelection();
+        std::string names;
+        for (size_t i = 0; i < todo.size(); i++) {
+            const CardRef r = addCombatant(encounter, board, Side::Players, creatureFromPlayer(todo[i]), spawnPos());
+            board.get(r).selected = true;
+            board.get(r).spawnT = -0.06f * static_cast<float>(i);  // staggered fade-in
+            added.push_back(r);
+            names += (names.empty() ? "" : ", ") + todo[i].name;
+        }
+        addLog("Added " + names, COL_MUTED);
+        return added;
+    };
+
     // Setup -> combat: round 1, the turn goes to the first card standing.
     auto startCombat = [&]() {
         if (!anyoneStanding()) return;
@@ -2430,8 +2550,20 @@ int main(int, char**) {
             y += ImGui::CalcTextSize(tip, nullptr, false, x1 - x0 - 16 * S).y + 10 * S;
         }
 
+        // Buttons at the bottom of the panel, but never over the text above them.
         const float bh = 46 * S;
-        ImGui::SetCursorScreenPos(ImVec2(x0, std::max(y + 10 * S, b.y - pad - bh)));
+        const float ph = 34 * S;
+        float startY = std::max(y + 10 * S, b.y - pad - bh);
+        if (!party.empty()) {
+            const std::vector<PlayerTemplate> missing = partyMissing();
+            const float partyY = std::max(y + 6 * S, startY - ph - 10 * S);
+            startY = std::max(startY, partyY + ph + 10 * S);
+            ImGui::SetCursorScreenPos(ImVec2(x0, partyY));
+            const std::string label = missing.empty() ? std::string("The whole party is here##setup")
+                                                      : "Add the party (" + std::to_string(missing.size()) + ")##setup";
+            if (quietButton(label.c_str(), ImVec2(x1 - x0, ph), !missing.empty())) addPartyMembers(missing);
+        }
+        ImGui::SetCursorScreenPos(ImVec2(x0, startY));
         if (primaryButton("Start combat", ImVec2(x1 - x0, bh), anyoneStanding())) startCombat();
     };
     // Moves a card to slot `slot` of the Turn order (0 = first), among the cards that
@@ -2518,6 +2650,7 @@ int main(int, char**) {
     bool newCharFocus = false;    // focus the name field when it opens
     int newCharSlot = -1;         // Turn order slot to insert the new cards at (-1 = end)
     bool newSaveLib = false;      // also save a new creature to the monster library
+    bool newSaveParty = true;     // also save a new player to the party
 
     // ---- Board interaction state
     bool marqueeActive = false;
@@ -2867,6 +3000,56 @@ int main(int, char**) {
             // ================= Library tab =================
             if (activeTab == 1) {
                 ImGui::BeginChild("AddBody", ImVec2(0, 0), false);
+                beginSection("Party", std::to_string(party.size()));
+                if (party.empty()) {
+                    ImGui::PushTextWrapPos(0);
+                    ImGui::TextDisabled("No players saved yet. Right-click a player's card > Save to party, "
+                                        "or tick \"Also save to the party\" in New character.");
+                    ImGui::PopTextWrapPos();
+                } else {
+                    int removeMember = -1;
+                    if (ImGui::BeginTable("party", 4, ImGuiTableFlags_BordersInnerH)) {
+                        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+                        ImGui::TableSetupColumn("Info", ImGuiTableColumnFlags_WidthFixed, 112 * S);
+                        ImGui::TableSetupColumn("Add", ImGuiTableColumnFlags_WidthFixed, 26 * S);
+                        ImGui::TableSetupColumn("Del", ImGuiTableColumnFlags_WidthFixed, 22 * S);
+                        for (int i = 0; i < static_cast<int>(party.size()); i++) {
+                            const PlayerTemplate t = party[i];
+                            ImGui::PushID(i);
+                            ImGui::TableNextRow();
+                            ImGui::TableNextColumn();
+                            ImGui::AlignTextToFramePadding();
+                            ImGui::TextUnformatted(t.name.c_str());
+                            ImGui::TableNextColumn();
+                            ImGui::AlignTextToFramePadding();
+                            ImGui::TextDisabled("Lv %d  %dhp  AC%d", t.level, t.maxHp, t.ac);
+                            ImGui::TableNextColumn();
+                            if (onBoard(t.name)) {
+                                ImGui::AlignTextToFramePadding();
+                                ImGui::TextDisabled("in");
+                                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Already on the board");
+                            } else {
+                                if (ImGui::SmallButton("+")) addPartyMembers({t});
+                                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add %s", t.name.c_str());
+                            }
+                            ImGui::TableNextColumn();
+                            if (ImGui::SmallButton("x")) removeMember = i;
+                            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Remove from the party");
+                            ImGui::PopID();
+                        }
+                        ImGui::EndTable();
+                    }
+                    if (removeMember >= 0) {
+                        party.erase(party.begin() + removeMember);
+                        saveParty();
+                    }
+                    const std::vector<PlayerTemplate> missing = partyMissing();
+                    const std::string label = missing.empty() ? std::string("The whole party is here##lib")
+                                                              : "Add the party (" + std::to_string(missing.size()) + ")##lib";
+                    if (primaryButton(label.c_str(), ImVec2(rowButtonWidth(1), 0), !missing.empty())) addPartyMembers(missing);
+                }
+                endSection();
+
                 beginSection("Monster library", std::to_string(library.size()));
                 ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 100 * S);
                 ImGui::InputTextWithHint("##filter", "Search...", libraryFilter, sizeof(libraryFilter));
@@ -3479,7 +3662,8 @@ int main(int, char**) {
                     }
                     ImGui::EndMenu();
                 }
-                if (!many && ImGui::MenuItem("Save to library")) {
+                if (!many && menuRef.side == Side::Players && ImGui::MenuItem("Save to party")) saveToParty(*c);
+                if (!many && menuRef.side == Side::Creatures && ImGui::MenuItem("Save to library")) {
                     MonsterTemplate t;
                     int n = 0;
                     t.name = splitNumberedName(c->getName(), &n);
@@ -3511,6 +3695,29 @@ int main(int, char**) {
                 newCharFocus = true;
                 newCharSlot = boardMenuSlot;
                 newName[0] = '\0';
+            }
+            {
+                const std::vector<PlayerTemplate> missing = partyMissing();
+                const std::string label = "Add the party (" + std::to_string(missing.size()) + ")";
+                if (ImGui::MenuItem(label.c_str(), nullptr, false, !missing.empty())) {
+                    const std::vector<CardRef> added = addPartyMembers(missing);
+                    if (boardMenuSlot >= 0) {
+                        for (size_t k = 0; k < added.size(); k++) placeInTurnOrder(added[k], boardMenuSlot + static_cast<int>(k));
+                    }
+                }
+            }
+            if (ImGui::BeginMenu("Add from party", !party.empty())) {
+                for (int i = 0; i < static_cast<int>(party.size()); i++) {
+                    const PlayerTemplate t = party[i];
+                    const std::string info = "Lv " + std::to_string(t.level) + "  " + std::to_string(t.maxHp) + " HP";
+                    if (ImGui::MenuItem((t.name + "##party" + std::to_string(i)).c_str(), info.c_str(), false, !onBoard(t.name))) {
+                        const std::vector<CardRef> added = addPartyMembers({t});
+                        if (boardMenuSlot >= 0) {
+                            for (size_t k = 0; k < added.size(); k++) placeInTurnOrder(added[k], boardMenuSlot + static_cast<int>(k));
+                        }
+                    }
+                }
+                ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Add from library")) {
                 for (int i = 0; i < static_cast<int>(library.size()); i++) {
@@ -3561,6 +3768,7 @@ int main(int, char**) {
                 ImGui::SetNextItemWidth(fieldW);
                 ImGui::InputInt("Level", &newLevel);
                 newLevel = std::clamp(newLevel, 1, 20);
+                ImGui::Checkbox("Also save to the party", &newSaveParty);
             } else {
                 ImGui::SetNextItemWidth(fieldW);
                 crCombo("CR", &newCr);
@@ -3602,6 +3810,12 @@ int main(int, char**) {
                     library.push_back(t);
                     saveLibrary();
                     statusMsg = std::string("Saved ") + newName + " to the library.";
+                }
+                if (side == Side::Players && newSaveParty) {
+                    Creature saved(newName, newMaxHp);
+                    saved.setAc(newAc);
+                    saved.setLevel(newLevel);
+                    saveToParty(saved);
                 }
                 if (newCharSlot >= 0) {
                     for (size_t i = 0; i < added.size(); i++) placeInTurnOrder(added[i], newCharSlot + static_cast<int>(i));
