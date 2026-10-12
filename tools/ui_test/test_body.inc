@@ -353,12 +353,19 @@
                     Creature g("Ghoul", 22); g.setColor(4); g.setIcon(4);
                     addCombatant(encounter, board, Side::Creatures, g, ImVec2(0, 0));
                     C("Aria")->setHp(20);
+                    openShare = true;  // opened before sharing starts: the window is small at first
+                });
+                act(20, [&]() {
                     startSharing();
                     check(playerServer.running() && playerServer.port() >= 8080, "player screens start on a local port (" + std::to_string(playerServer.port()) + ")");
                     std::printf("  phone URL: %s\n", shareUrl.c_str());
-                    openShare = true;
                 });
-                act(25, [&]() { g_shot = "23_share_qr"; });
+                act(25, [&]() {
+                    ImGuiWindow* w = ImGui::FindWindowByName("Player screens");
+                    const ImVec2 c = ImGui::GetMainViewport()->GetCenter();
+                    const bool centered = w && std::fabs(w->Pos.x + w->Size.x * 0.5f - c.x) < 2.0f && std::fabs(w->Pos.y + w->Size.y * 0.5f - c.y) < 2.0f;
+                    check(centered, "the QR window stays centered once the QR code appears");
+                    g_shot = "23_share_qr"; });
                 act(3, [&]() { key(true, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
                 act(3, [&]() { key(false, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
                 act(1, [&]() {

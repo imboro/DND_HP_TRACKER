@@ -25,8 +25,9 @@ public:
     // How many different phones asked for the state in the last few seconds.
     int viewers() const;
 
+    struct Impl;  // implementation detail, defined in player_server.cpp
+
 private:
-    struct Impl;
     std::unique_ptr<Impl> impl;
 };
 

@@ -4140,7 +4140,9 @@ int main(int, char**) {
                 makeQr(shareUrl);
             }
         }
-        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        // Centered every frame: the window grows when the QR code appears, and it should
+        // stay in the middle of the screen rather than grow downward.
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 2.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 16 * S);
         const bool shareOpen = ImGui::BeginPopupModal("Player screens", nullptr,

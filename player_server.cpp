@@ -88,7 +88,7 @@ std::string localNetworkAddress() {
 }
 
 struct PlayerServer::Impl {
-    httplib::Server server;
+    std::unique_ptr<httplib::Server> server;
     std::thread thread;
     int port = 0;
     bool running = false;
@@ -102,16 +102,34 @@ PlayerServer::PlayerServer() : impl(std::make_unique<Impl>()) {}
 
 PlayerServer::~PlayerServer() { stop(); }
 
+// A server with the page and state routes. Each port is tried with a fresh one:
+// after a failed bind, an httplib::Server refuses to bind again.
+static std::unique_ptr<httplib::Server> makeServer(PlayerServer::Impl* d, const std::string& page);
+
 bool PlayerServer::start(int firstPort) {
     if (impl->running) return true;
     Impl* d = impl.get();
     const std::string page = pageHtml();
+    for (int port = firstPort; port < firstPort + 20; port++) {
+        std::unique_ptr<httplib::Server> server = makeServer(d, page);
+        if (server->bind_to_port("0.0.0.0", port)) {
+            d->server = std::move(server);
+            d->port = port;
+            d->running = true;
+            d->thread = std::thread([d] { d->server->listen_after_bind(); });
+            return true;
+        }
+    }
+    return false;
+}
 
-    d->server.Get("/", [page](const httplib::Request&, httplib::Response& res) {
+static std::unique_ptr<httplib::Server> makeServer(PlayerServer::Impl* d, const std::string& page) {
+    auto server = std::make_unique<httplib::Server>();
+    server->Get("/", [page](const httplib::Request&, httplib::Response& res) {
         res.set_header("Cache-Control", "no-store");
         res.set_content(page, "text/html; charset=utf-8");
     });
-    d->server.Get("/state", [d](const httplib::Request& req, httplib::Response& res) {
+    server->Get("/state", [d](const httplib::Request& req, httplib::Response& res) {
         std::string body;
         {
             std::lock_guard<std::mutex> lock(d->mutex);
@@ -121,28 +139,28 @@ bool PlayerServer::start(int firstPort) {
         res.set_header("Cache-Control", "no-store");
         res.set_content(body, "application/json; charset=utf-8");
     });
-    d->server.Get("/favicon.ico", [](const httplib::Request&, httplib::Response& res) { res.status = 204; });
-    d->server.set_read_timeout(5, 0);
-    d->server.set_write_timeout(5, 0);
-
-    for (int port = firstPort; port < firstPort + 20; port++) {
-        if (d->server.bind_to_port("0.0.0.0", port)) {
-            d->port = port;
-            d->running = true;
-            d->thread = std::thread([d] { d->server.listen_after_bind(); });
-            return true;
-        }
-    }
-    return false;
+    server->Get("/favicon.ico", [](const httplib::Request&, httplib::Response& res) { res.status = 204; });
+    // httplib's default sets SO_REUSEPORT, which on macOS lets a second program (or a
+    // second copy of the app) listen on the very same port, and phones could end up on
+    // the wrong one. A port in use must look busy, so the next free one is taken.
+    server->set_socket_options([](socket_t sock) {
+        int yes = 1;
+#ifdef _WIN32
+        ::setsockopt(sock, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&yes), sizeof(yes));
+#else
+        ::setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));  // quick restarts only
+#endif
+    });
+    server->set_read_timeout(5, 0);
+    server->set_write_timeout(5, 0);
+    return server;
 }
 
 void PlayerServer::stop() {
     if (!impl->running) return;
-    impl->server.stop();
+    impl->server->stop();
     if (impl->thread.joinable()) impl->thread.join();
-    impl->running = false;
-    // A stopped httplib::Server can't listen again; start over with a fresh one.
-    impl = std::make_unique<Impl>();
+    impl = std::make_unique<Impl>();  // a clean slate for the next start
 }
 
 bool PlayerServer::running() const { return impl->running; }
