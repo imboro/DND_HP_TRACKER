@@ -517,14 +517,46 @@ writes screenshots to `build/ui_test/`.
 
 ## Project layout
 
+The code is in two layers. `core/` holds the D&D rules and knows nothing about
+windows or drawing; `gui/` is the app built on top of it. The rules can be tested
+on their own (`tests/logic_tests.cpp`) and could be reused by another front end.
+
+**`core/` — the rules**
+
 | File | What it is |
 |---|---|
-| `creature.h/.cpp` | A combatant: HP, temp HP, stats, resistances, conditions, concentration, death saves |
-| `encounter.h/.cpp` | Players and enemies, plus the rules triggered by hits (concentration DC, death saves, massive damage) |
+| `creature.h/.cpp` | `Creature`: one combatant. HP, temp HP, stats, resistances, conditions, concentration, death saves |
+| `encounter.h/.cpp` | `Encounter`: the players and enemies, plus the rules triggered by hits (concentration DC, death saves, massive damage) |
 | `difficulty.h/.cpp` | 5e encounter difficulty, CR/XP table |
-| `gui_main.cpp` | The window: board, cards, sidebar, animations, saving, library. The light ink-outline theme (palette, `inkBox`, section boxes) is at the top |
-| `logic_tests.cpp` | Tests for the rules layer |
-| `main.cpp` | Console demo |
+| `console_demo.cpp` | Small console demo of the rules classes |
+
+**`gui/` — the app**
+
+| File | What it is |
+|---|---|
+| `main.cpp` | Opens the window, sets up ImGui and runs `App` |
+| `app.h` | `App`: owns the encounter, board, libraries and player screens; draws each frame |
+| `app.cpp` | The frame loop, loading, and the actions the UI calls (damage, turns, undo, party...) |
+| `app_sidebar.cpp` | The sidebar: summary tiles and the Combat / Library / Log tabs |
+| `app_board.cpp` | The board: Turn order and Defeated columns, spotlight, setup panel, drag and drop |
+| `app_popups.cpp` | Menus and windows: card menu, board menu, New character, Edit, New encounter, QR |
+| `board.h/.cpp` | `BoardState` and `CardState`: turn order, selection and per-card animation state, kept in step with `Encounter` |
+| `board_view.h/.cpp` | Drawing a card row, the spotlight, damage numbers and the trash |
+| `looks.h/.cpp` | Card colors and icons, and the picker for them |
+| `ui_kit.h/.cpp` | The look: palette, fonts, ink-outline boxes, buttons, section boxes, tabs, line icons |
+| `alerts.h/.cpp` | The combat log entries and the alert toasts |
+| `undo_history.h/.cpp` | `UndoHistory`: undo / redo over saved snapshots |
+| `save_format.h/.cpp` | The save file format and file reading / writing |
+| `library.h/.cpp` | Monster library and party: templates and their files |
+| `player_state.h/.cpp` | Player screens: the public state of the fight as JSON |
+| `player_server.h/.cpp` | Player screens: the local web server (on its own thread) and the network address for the QR |
+| `player_page.inc` | Player screens: the phone page (HTML, CSS and JavaScript) |
+
+**Everything else**
+
+| File | What it is |
+|---|---|
+| `tests/logic_tests.cpp` | Tests for the rules layer |
 | `package_mac.sh` | Builds the shareable app bundle and zip |
 | `player_server.h/.cpp` | Player screens: the local web server (on its own thread) and the network address for the QR |
 | `player_page.inc` | Player screens: the phone page (HTML, CSS and JavaScript) |

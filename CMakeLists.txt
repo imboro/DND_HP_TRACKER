@@ -6,20 +6,35 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(SDL2 REQUIRED)
 
-set(LOGIC_SOURCES creature.cpp encounter.cpp difficulty.cpp)
+# core/: the D&D rules (no UI). gui/: the window, built on top of core.
+set(LOGIC_SOURCES core/creature.cpp core/encounter.cpp core/difficulty.cpp)
+include_directories(core)
 
 # Console demo
-add_executable(console_demo main.cpp ${LOGIC_SOURCES})
+add_executable(console_demo core/console_demo.cpp ${LOGIC_SOURCES})
 
 # Rules tests (no UI): ./build/logic_tests
-add_executable(logic_tests logic_tests.cpp ${LOGIC_SOURCES})
+add_executable(logic_tests tests/logic_tests.cpp ${LOGIC_SOURCES})
 
 # ImGui GUI
 set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/third_party/imgui)
 find_package(Threads REQUIRED)
 add_executable(hp_tracker_gui
-    gui_main.cpp
-    player_server.cpp
+    gui/main.cpp
+    gui/app.cpp
+    gui/app_sidebar.cpp
+    gui/app_board.cpp
+    gui/app_popups.cpp
+    gui/board.cpp
+    gui/board_view.cpp
+    gui/looks.cpp
+    gui/ui_kit.cpp
+    gui/alerts.cpp
+    gui/undo_history.cpp
+    gui/save_format.cpp
+    gui/library.cpp
+    gui/player_state.cpp
+    gui/player_server.cpp
     ${CMAKE_SOURCE_DIR}/third_party/qrcodegen/qrcodegen.cpp
     ${LOGIC_SOURCES}
     ${IMGUI_DIR}/imgui.cpp
@@ -29,8 +44,10 @@ add_executable(hp_tracker_gui
     ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
     ${IMGUI_DIR}/backends/imgui_impl_sdlrenderer2.cpp
 )
-target_include_directories(hp_tracker_gui PRIVATE ${IMGUI_DIR} ${IMGUI_DIR}/backends
+target_include_directories(hp_tracker_gui PRIVATE gui ${IMGUI_DIR} ${IMGUI_DIR}/backends
     ${CMAKE_SOURCE_DIR}/third_party/httplib ${CMAKE_SOURCE_DIR}/third_party/qrcodegen)
+# ImVec2 + ImVec2 and friends, for every file (must be set before imgui.h is included).
+target_compile_definitions(hp_tracker_gui PRIVATE IMGUI_DEFINE_MATH_OPERATORS)
 # Player screens: a small web server (cpp-httplib) on a background thread.
 target_link_libraries(hp_tracker_gui PRIVATE Threads::Threads)
 if(WIN32)

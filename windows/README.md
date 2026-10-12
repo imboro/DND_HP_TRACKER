@@ -1,8 +1,9 @@
 # Windows build
 
 Everything for the Windows version lives in this folder, apart from the Mac
-build (`build/`, `dist/`). The source code is shared: `gui_main.cpp` has a few
-`#ifdef _WIN32` spots (fonts, display scaling, scroll speed, save paths).
+build (`build/`, `dist/`). The source code is shared: a few files in `gui/` have
+`#ifdef _WIN32` spots (fonts in `ui_kit.cpp`, display scaling in `main.cpp`, scroll
+speed in `app.cpp`, save paths in `save_format.cpp`, sockets in `player_server.cpp`).
 
 | File | What it is |
 |---|---|

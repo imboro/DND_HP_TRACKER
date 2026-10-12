@@ -76,7 +76,7 @@
                 // 3) Click selects one; shift-click adds
                 clickAt([=]() { return bodyPt("Goblin"); });
                 shiftClick([=]() { return bodyPt("Orc"); });
-                act(1, [&]() { check(selectedRefs().size() == 2 && board.get(findRef("Orc")).selected && !board.get(findRef("Hero")).selected, "click + shift-click selects Goblin and Orc (" + std::to_string(selectedRefs().size()) + ")"); });
+                act(1, [&]() { check(board.selectedRefs().size() == 2 && board.get(findRef("Orc")).selected && !board.get(findRef("Hero")).selected, "click + shift-click selects Goblin and Orc (" + std::to_string(board.selectedRefs().size()) + ")"); });
                 // 4) Area damage, then half damage for the ones that saved
                 setAmount(10);
                 clickAt([=]() { return rectCenter("Damage all"); });
@@ -127,11 +127,11 @@
                 // clicking a toast fades it away quickly, without reaching the cards under it
                 static std::string clickedText;
                 static size_t selBefore = 0;
-                act(1, [&]() { clickedText = alerts.empty() ? "" : alerts.front().text; selBefore = selectedRefs().size();
+                act(1, [&]() { clickedText = alerts.empty() ? "" : alerts.front().text; selBefore = board.selectedRefs().size();
                                std::printf("  alerts on screen: %zu, clicking \"%s\"\n", alerts.size(), clickedText.c_str()); });
                 clickAt([&]() { const Alert& a = alerts.front(); return ImVec2((a.rectMin.x + a.rectMax.x) / 2, (a.rectMin.y + a.rectMax.y) / 2); });
                 act(1, [&]() { const Alert* a = alertNamed(clickedText); check(a && a->clicked >= 0.0, "clicking a toast starts its fade");
-                               check(selectedRefs().size() == selBefore, "the click doesn't reach the cards under the toast"); });
+                               check(board.selectedRefs().size() == selBefore, "the click doesn't reach the cards under the toast"); });
                 waitSeconds(0.5);
                 act(1, [&]() { check(!alertNamed(clickedText), "a clicked toast is gone after a quick fade"); });
                 // 10) Resistance halves damage
@@ -170,7 +170,7 @@
                     Encounter e3; BoardState b3;
                     check(deserializeBoard("HPTRACKER 1\nP|Old Hero|40|33|50|62.5\n", e3, b3) && e3.getPlayers().size() == 1 && e3.getPlayers()[0].getCurrentHp() == 33, "v1 save files still load");
                     Encounter e4; BoardState b4; Creature w("We|ird, name: x", 9); w.setNotes("line1\nline|2, with: stuff"); w.addCondition("Hex: custom", 2);
-                    addCombatant(e4, b4, Side::Creatures, w, ImVec2(1, 2));
+                    addCombatant(e4, b4, Side::Creatures, w);
                     Encounter e5; BoardState b5; deserializeBoard(serializeBoard(e4, b4), e5, b5);
                     check(e5.getCreatures().size() == 1 && e5.getCreatures()[0].getName() == "We|ird, name: x" && e5.getCreatures()[0].getNotes() == "line1\nline|2, with: stuff" && e5.getCreatures()[0].hasCondition("Hex: custom"), "separators in names/notes/conditions survive saving");
                 });
@@ -200,13 +200,13 @@
                 static auto turnIs = [&](const std::string& n) { return board.turnValid && board.turn == findRef(n); };
                 static auto zIndex = [&](const std::string& n) { CardRef r = findRef(n); for (size_t i = 0; i < board.z.size(); i++) if (board.z[i] == r) return (int)i; return -1; };
                 act(2, [&]() {
-                    encounter.clear(); board = BoardState(); undoStack.clear(); redoStack.clear(); clearSelection();
+                    encounter.clear(); board = BoardState(); history.clear(); board.clearSelection();
                     Creature a("Aria", 20); a.setLevel(3); a.setAc(15);
                     Creature b("Bram", 20); Creature c("Cora", 20); Creature d("Dax", 20); d.setLevel(3);
-                    addCombatant(encounter, board, Side::Players, a, ImVec2(0, 0));
-                    addCombatant(encounter, board, Side::Creatures, b, ImVec2(0, 0));
-                    addCombatant(encounter, board, Side::Creatures, c, ImVec2(0, 0));
-                    addCombatant(encounter, board, Side::Players, d, ImVec2(0, 0));
+                    addCombatant(encounter, board, Side::Players, a);
+                    addCombatant(encounter, board, Side::Creatures, b);
+                    addCombatant(encounter, board, Side::Creatures, c);
+                    addCombatant(encounter, board, Side::Players, d);
                     startCombat();
                 });
                 act(30, [&]() { g_scrollTo = "Next turn"; });
@@ -286,7 +286,7 @@
                 act(4, [&]() { g_shot = "17_new_character"; });
                 clickAt([=]() { return rectCenter("Create"); });
                 act(3, [&]() { check(exists("Zed") && zIndex("Zed") == 1 && CS("Zed").selected, "New character creates the card at the chosen slot"); });
-                act(70, [&]() { g_scrollTo = "End combat"; clearSelection(); motion(g_boardOrigin.x + g_boardSize.x - 60 * s, g_boardOrigin.y + g_boardSize.y * 0.5f); });
+                act(70, [&]() { g_scrollTo = "End combat"; board.clearSelection(); motion(g_boardOrigin.x + g_boardSize.x - 60 * s, g_boardOrigin.y + g_boardSize.y * 0.5f); });
                 act(1, [&]() { g_shot = "18_final"; });
                 clickAt([=]() { return rectCenter("End combat"); });
                 act(20, [&]() { check(!board.inCombat && encounter.getCreatures().empty() && exists("Aria") && exists("Dax") && C("Dax")->getCurrentHp() == 0,
@@ -351,7 +351,7 @@
                 static auto localUrl = [&](const std::string& path) { return "http://127.0.0.1:" + std::to_string(playerServer.port()) + "/" + path; };
                 act(2, [&]() {
                     Creature g("Ghoul", 22); g.setColor(4); g.setIcon(4);
-                    addCombatant(encounter, board, Side::Creatures, g, ImVec2(0, 0));
+                    addCombatant(encounter, board, Side::Creatures, g);
                     C("Aria")->setHp(20);
                     openShare = true;  // opened before sharing starts: the window is small at first
                 });
