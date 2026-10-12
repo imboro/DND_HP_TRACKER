@@ -1,14 +1,15 @@
 # DnD HP Tracker
 
 A combat tracker for Dungeons & Dragons 5e Dungeon Masters. Put the party and the
-monsters on a board as cards. The tracker handles hit points, temporary HP,
-resistances, conditions, concentration checks, death saves and encounter
-difficulty, so you can focus on running the fight.
+monsters on a board as cards, in a **turn order** you arrange by hand, and pass the
+turn with one click. The tracker handles hit points, temporary HP, resistances,
+conditions, concentration checks, death saves and encounter difficulty, so you can
+focus on running the fight.
 
-It deliberately does **not** track initiative or turn order. You call the turns;
-the tracker keeps the numbers straight.
+There are no initiative numbers: you drag the cards into the order your table
+agreed on, and the tracker follows it.
 
-![The tracker: sidebar on the left, creature cards on the board, alerts top-right](docs/screenshot.png)
+![The tracker: sidebar on the left, the Turn order and Defeated columns on the board, alerts top-right](docs/screenshot.png)
 
 ---
 
@@ -26,7 +27,7 @@ the tracker keeps the numbers straight.
 - [Adding creatures and the monster library](#adding-creatures-and-the-monster-library)
 - [Encounter summary and difficulty](#encounter-summary-and-difficulty)
 - [Alerts and the combat log](#alerts-and-the-combat-log)
-- [Arranging the board](#arranging-the-board)
+- [The turn order](#the-turn-order)
 - [Undo, saving and starting over](#undo-saving-and-starting-over)
 - [Keyboard and mouse reference](#keyboard-and-mouse-reference)
 - [Rules the tracker applies](#rules-the-tracker-applies)
@@ -41,9 +42,10 @@ the tracker keeps the numbers straight.
    **Open**, because the app isn't signed by a paid Apple developer account.
 2. On first launch you get a sample Hero, Goblin and Orc. Delete them by dragging
    them onto the trash can, or use **New encounter > Remove everything**.
-3. Add your party and monsters in the **Add** tab.
+3. **Right-click** the board and choose **New character...** to add your party and
+   monsters (or **Add from library**). Drag the cards into the turn order.
 4. Type an amount (e.g. `8`) in the **Amount** box and press **Damage** or
-   **Heal** on a card.
+   **Heal** on a card. Press **Next turn** (or Space) to pass the turn.
 
 Everything autosaves, so closing the app never loses the fight.
 
@@ -62,15 +64,18 @@ Everything autosaves, so closing the app never loses the fight.
 - **Combat** tab
   - The damage/heal amount.
   - Actions for the selected creatures.
-  - Rounds.
-  - Board size.
+  - Next turn, End round and the round counter.
+  - Card size.
   - Encounter controls, save/load and undo/redo.
-- **Add** tab: create creatures and use the monster library.
+- **Library** tab: the monster library.
 - **Log** tab: everything that happened, round by round.
 
 **Right: the board**
 
-- Every combatant is a card you can drag anywhere.
+- **Turn order** (left): everyone still in the fight, top to bottom. The card that
+  holds the turn steps forward and wears a black **TURN** ribbon.
+- **Defeated** (right): enemies at 0 HP and players who have died. Cards fall
+  here by themselves.
 - Alerts pop up in the top-right corner.
 - The trash can is in the bottom-right corner.
 
@@ -143,7 +148,7 @@ temp HP soaked it all, or `IMMUNE`.
 
 - **Click** a card to select it (a gold ring appears).
 - **Shift-click** (or Cmd-click) to add or remove cards.
-- **Drag a box** on an empty part of the board to select everything it touches.
+- **Drag a box** on empty space in a column to select the cards it touches.
 - **Cmd+A** selects all, and **Esc** clears the selection.
 
 ### What you can do with a selection (Combat tab)
@@ -165,8 +170,6 @@ temp HP soaked it all, or `IMMUNE`.
 2. Select the goblins that **failed** the save and press **Damage all**.
 3. Select the goblins that **succeeded** and press **Half damage (14)**.
 
-Dragging a selected card moves the whole selection together.
-
 ---
 
 ## Conditions and rounds
@@ -184,7 +187,7 @@ There are three ways to add a condition:
 increases the round counter. When a condition runs out you get an alert
 ("Goblin 2: Poisoned ended"). Conditions with no duration stay until you remove them.
 
-The tracker has no turn order, so you decide when a round ends.
+Passing the turn does **not** end the round: you decide when a round ends.
 
 ---
 
@@ -249,13 +252,16 @@ With several cards selected, the menu acts on all of them.
 
 ## Adding creatures and the monster library
 
-### Add tab: new combatant
+### Right-click the board: New character
 
-1. Enter a name, choose **Player** or **Creature**, then set Max HP and AC, plus
-   Level (players) or CR (creatures).
-2. Set **How many** and press **Add**.
+Right-click on empty space in a column:
 
-New cards go to a free spot on the board and are selected.
+- **New character...** opens a small window: name, **Player** or **Creature**, Max HP
+  and AC, plus Level (players) or CR (creatures), **How many**, and (for creatures) a
+  checkbox to also save it to the monster library. Press **Create** or Enter.
+- **Add from library** lists the monsters of the library; one click adds one.
+
+New cards are added in the slot under the cursor and are selected.
 
 **Automatic numbering:** adding 3 Goblins gives *Goblin 1, Goblin 2, Goblin 3*.
 If a plain "Goblin" is already on the board, it's renamed "Goblin 1" and the new
@@ -268,9 +274,11 @@ The library lists ready-made monsters (Goblin, Orc, Wolf, Ogre, Troll …) with 
 AC, speed, passive Perception and CR.
 
 - **Search** filters the list.
-- **+** adds the monster (as many as the box next to the search says).
+- **+** adds the monster to the end of the turn order (as many as the box next to
+  the search says).
 - **x** removes it from the library.
-- **Save to library** (Add tab, or right-click a card) stores your own monsters.
+- **Save to library** (right-click a card, or the checkbox in New character) stores
+  your own monsters.
 - **Restore default library** brings back the built-in list.
 
 ---
@@ -309,15 +317,35 @@ which is handy for session notes.
 
 ---
 
-## Arranging the board
+## The turn order
 
-- **Drag** cards anywhere. Clicking a card brings it to the front, and when cards
-  overlap the front one always gets the click.
+The board has two columns:
+
+- **Turn order** holds everyone still in the fight, in the order you arrange.
+  Players and monsters are mixed in one list; the color of the icon tells them apart.
+- **Defeated** collects the fallen. A card drops there on its own once its death
+  animation has played: enemies at 0 HP, and players who failed their third death
+  save. Players at 0 HP who are still making death saves stay in the Turn order.
+  If a fallen card is healed (or you undo), it goes back to its old slot.
+
+**Passing the turn**
+
+- Press **Next turn** (Combat tab), the **Space** or **Right arrow** key, or click the
+  black **TURN** ribbon on the active card. Defeated cards are skipped, and after the
+  last card it wraps around to the first. The round counter does not change: press
+  **End round** when the round is over.
+- Right-click a card > **Start turn here** to jump the turn to any card.
+- If the card that holds the turn is defeated, the turn moves on by itself.
+
+**Arranging**
+
+- **Drag** a card up or down in the Turn order; a gap opens where it will land.
+  Drop it there. The other cards slide out of the way.
+- **Scroll** a column with the mouse wheel or trackpad when it holds more cards than
+  fit. The view follows the turn when it moves.
 - **Trash:** drop a card (or a selected group) on the trash can in the corner to
   delete it. Undo brings it back.
 - **Card size** (Combat tab > Board): shrink cards to 60–100% to fit more creatures.
-- **Tidy board:** lines up all cards, party on top and enemies below, and shrinks
-  them if they wouldn't otherwise fit.
 
 ---
 
@@ -350,11 +378,13 @@ Files are stored in `~/Library/Application Support/HotelWorkshop/HPTracker/`:
 |---|---|
 | Select a card | Click |
 | Add/remove from selection | Shift-click or Cmd-click |
-| Box select | Drag on empty board |
+| Box select | Drag on empty space in a column |
 | Select all / clear selection | Cmd+A / Esc |
 | Edit | Double-click a card |
 | Card menu | Right-click a card |
-| Move | Drag a card (moves the whole selection if it's selected) |
+| New character / Add from library | Right-click empty space on the board |
+| Next turn | Space or Right arrow (or the TURN ribbon, or the Next turn button) |
+| Reorder the turn order | Drag a card up or down |
 | Delete | Drag to the trash, or Delete/Backspace for the selection |
 | Duplicate | Cmd+D |
 | Undo / Redo | Cmd+Z / Cmd+Shift+Z or Cmd+Y |
@@ -411,7 +441,7 @@ bundled inside, so it runs on Macs without Homebrew. It's built for Apple Silico
 
 **Scripted UI tests:** `tools/ui_test/run_ui_tests.sh` builds a test copy of the app that
 drives itself with simulated mouse and keyboard input (clicks, box-select, area damage,
-undo, death saves, the edit dialog, the trash, ...), prints PASS/FAIL per check and
+undo, death saves, the edit dialog, the trash, the turn order, ...), prints PASS/FAIL per check and
 writes screenshots to `build/ui_test/`.
 
 ---

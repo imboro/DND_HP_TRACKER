@@ -11,8 +11,8 @@
             static std::function<void(bool, SDL_Keycode, SDL_Scancode, Uint16)> key;
             if (!motion) {
                 const Uint32 wid = SDL_GetWindowID(window);
-                motion = [wid](float x, float y) { SDL_Event e{}; e.type = SDL_MOUSEMOTION; e.motion.windowID = wid; e.motion.x = (int)x; e.motion.y = (int)y; SDL_PushEvent(&e); };
-                button = [wid](bool down, float x, float y) { SDL_Event e{}; e.type = down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP; e.button.windowID = wid; e.button.button = SDL_BUTTON_LEFT; e.button.state = down ? SDL_PRESSED : SDL_RELEASED; e.button.clicks = 1; e.button.x = (int)x; e.button.y = (int)y; SDL_PushEvent(&e); };
+                motion = [wid](float x, float y) { g_testMouse = ImVec2(x, y); SDL_Event e{}; e.type = SDL_MOUSEMOTION; e.motion.windowID = wid; e.motion.which = TEST_MOUSE_ID; e.motion.x = (int)x; e.motion.y = (int)y; SDL_PushEvent(&e); };
+                button = [wid](bool down, float x, float y) { SDL_Event e{}; e.type = down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP; e.button.windowID = wid; e.button.which = TEST_MOUSE_ID; e.button.button = SDL_BUTTON_LEFT; e.button.state = down ? SDL_PRESSED : SDL_RELEASED; e.button.clicks = 1; e.button.x = (int)x; e.button.y = (int)y; SDL_PushEvent(&e); };
                 key = [wid](bool down, SDL_Keycode sym, SDL_Scancode sc, Uint16 mod) { SDL_Event e{}; e.type = down ? SDL_KEYDOWN : SDL_KEYUP; e.key.windowID = wid; e.key.state = down ? SDL_PRESSED : SDL_RELEASED; e.key.keysym.sym = sym; e.key.keysym.scancode = sc; e.key.keysym.mod = mod; SDL_PushEvent(&e); };
             }
             auto check = [](bool ok, const std::string& what) { std::printf("%s  %s\n", ok ? "PASS" : "FAIL", what.c_str()); if (!ok) fails++; };
@@ -26,18 +26,11 @@
                 };
                 static auto exists = [&](const std::string& n) { return findRef(n).index >= 0; };
                 static auto C = [&](const std::string& n) { CardRef r = findRef(n); return encounter.at(r.side, r.index); };
-                static auto cardP = [&](const std::string& n) { CardRef r = findRef(n); return g_boardOrigin + board.get(r).pos; };
-                static auto bw = []() { return (240 * s - 24 * s - 13 * s) / 2; };
-                static auto btnY = []() { return 58 * s + g_lineH * 1.2f + 8 * s + 14 * s + 12 * s + 14 * s; };
-                static auto dmgPt = [&](const std::string& n) { ImVec2 p = cardP(n); return ImVec2(p.x + 12 * s + bw() / 2, p.y + btnY()); };
-                static auto bodyPt = [&](const std::string& n) { ImVec2 p = cardP(n); return ImVec2(p.x + 200 * s, p.y + 22 * s); };
-                static auto pipPt = [&](const std::string& n, int group, int i) {
-                    ImVec2 p = cardP(n); const float d = 13 * s, gap = 4 * s, gg = 12 * s;
-                    float x = p.x + 240 * s - 12 * s - (d * 6 + gap * 4 + gg);
-                    if (group == 1) x += 3 * (d + gap) + gg - gap;
-                    x += i * (d + gap) + d / 2;
-                    return ImVec2(x, p.y + 58 * s + g_lineH * 0.6f);
-                };
+                static auto CS = [&](const std::string& n) -> CardState& { return board.get(findRef(n)); };
+                static auto dmgPt = [&](const std::string& n) { return CS(n).damageCenter; };
+                static auto healPt = [&](const std::string& n) { return CS(n).healCenter; };
+                static auto bodyPt = [&](const std::string& n) { CardState& st = CS(n); return ImVec2(st.drawPos.x + st.size.x * 0.45f, st.drawPos.y + 22 * s); };
+                static auto pipPt = [&](const std::string& n, int group, int i) { return CS(n).pipCenter[group * 3 + i]; };
                 static auto rectCenter = [](const std::string& label) { auto it = g_rects.find(label); if (it == g_rects.end()) { std::printf("  (no rect for %s)\n", label.c_str()); return ImVec2(-100, -100); } return ImVec2((it->second.Min.x + it->second.Max.x) / 2, (it->second.Min.y + it->second.Max.y) / 2); };
                 static auto clickAt = [&](std::function<ImVec2()> where, int after = 4) {
                     steps.push_back({2, [=]() { ImVec2 p = where(); motion(p.x, p.y); button(true, p.x, p.y); }});
@@ -67,11 +60,15 @@
                 act(2, [&]() { check(C("Goblin")->getCurrentHp() == 4, "card Damage button deals the amount: Goblin 7 -> 4 (hp " + std::to_string(C("Goblin")->getCurrentHp()) + ")");
                                bool found = false; for (auto& e : log) if (e.text.find("Goblin takes 3") != std::string::npos) found = true; check(found, "log records the hit"); });
                 act(80, [&]() {});
-                // 2) Box-select from the empty top-left corner
-                act(2, [&]() { motion(g_boardOrigin.x + 8 * s, g_boardOrigin.y + 8 * s); button(true, g_boardOrigin.x + 8 * s, g_boardOrigin.y + 8 * s); });
-                act(2, [&]() { motion(g_boardOrigin.x + 320 * s, g_boardOrigin.y + 120 * s); });
+                // 2) Box-select from empty space beside the Hero card, dragging over Goblin
+                static ImVec2 mq0, mq1;
+                act(1, [&]() { CardState& h = CS("Hero"); CardState& g = CS("Goblin");
+                               mq0 = ImVec2(h.drawPos.x + h.size.x + 4 * s, h.drawPos.y + 30 * s);
+                               mq1 = ImVec2(g.drawPos.x + 40 * s, g.drawPos.y + 30 * s); });
+                act(2, [&]() { motion(mq0.x, mq0.y); button(true, mq0.x, mq0.y); });
+                act(2, [&]() { motion(mq1.x, mq1.y); });
                 act(1, [&]() { g_shot = "02_marquee"; });
-                act(3, [&]() { button(false, g_boardOrigin.x + 320 * s, g_boardOrigin.y + 120 * s); });
+                act(3, [&]() { button(false, mq1.x, mq1.y); });
                 act(1, [&]() { check(board.get(findRef("Hero")).selected && board.get(findRef("Goblin")).selected && !board.get(findRef("Orc")).selected, "box selection picks Hero + Goblin, not Orc"); });
                 // 3) Click selects one; shift-click adds
                 clickAt([=]() { return bodyPt("Goblin"); });
@@ -97,8 +94,8 @@
                 act(2, [&]() { check(C("Hero")->getTempHp() == 0 && C("Hero")->getCurrentHp() == 37, "temp HP absorbs first: Hero 37/40, temp 0 (hp " + std::to_string(C("Hero")->getCurrentHp()) + ")");
                                check(alertHas("Hero: concentration save, DC 10"), "concentration alert DC 10"); });
                 // 7) Right-click menu opens
-                act(2, [&]() { ImVec2 p = bodyPt("Orc"); motion(p.x, p.y); SDL_Event e{}; e.type = SDL_MOUSEBUTTONDOWN; e.button.windowID = SDL_GetWindowID(window); e.button.button = SDL_BUTTON_RIGHT; e.button.state = SDL_PRESSED; e.button.clicks = 1; e.button.x = (int)p.x; e.button.y = (int)p.y; SDL_PushEvent(&e); });
-                act(2, [&]() { ImVec2 p = bodyPt("Orc"); SDL_Event e{}; e.type = SDL_MOUSEBUTTONUP; e.button.windowID = SDL_GetWindowID(window); e.button.button = SDL_BUTTON_RIGHT; e.button.state = SDL_RELEASED; e.button.x = (int)p.x; e.button.y = (int)p.y; SDL_PushEvent(&e); });
+                act(2, [&]() { ImVec2 p = bodyPt("Orc"); motion(p.x, p.y); SDL_Event e{}; e.type = SDL_MOUSEBUTTONDOWN; e.button.windowID = SDL_GetWindowID(window); e.button.which = TEST_MOUSE_ID; e.button.button = SDL_BUTTON_RIGHT; e.button.state = SDL_PRESSED; e.button.clicks = 1; e.button.x = (int)p.x; e.button.y = (int)p.y; SDL_PushEvent(&e); });
+                act(2, [&]() { ImVec2 p = bodyPt("Orc"); SDL_Event e{}; e.type = SDL_MOUSEBUTTONUP; e.button.windowID = SDL_GetWindowID(window); e.button.which = TEST_MOUSE_ID; e.button.button = SDL_BUTTON_RIGHT; e.button.state = SDL_RELEASED; e.button.x = (int)p.x; e.button.y = (int)p.y; SDL_PushEvent(&e); });
                 act(3, [&]() { check(ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel), "right-click opens the card menu"); g_shot = "03_menu"; });
                 act(3, [&]() { key(true, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
                 act(3, [&]() { key(false, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
@@ -149,7 +146,7 @@
                 // 13) Edit via double-click
                 act(2, [&]() { ImVec2 p = bodyPt("Hero"); motion(p.x, p.y); button(true, p.x, p.y); });
                 act(1, [&]() { ImVec2 p = bodyPt("Hero"); button(false, p.x, p.y); });
-                act(1, [&]() { ImVec2 p = bodyPt("Hero"); SDL_Event e{}; e.type = SDL_MOUSEBUTTONDOWN; e.button.windowID = SDL_GetWindowID(window); e.button.button = SDL_BUTTON_LEFT; e.button.state = SDL_PRESSED; e.button.clicks = 2; e.button.x = (int)p.x; e.button.y = (int)p.y; SDL_PushEvent(&e); });
+                act(1, [&]() { ImVec2 p = bodyPt("Hero"); SDL_Event e{}; e.type = SDL_MOUSEBUTTONDOWN; e.button.windowID = SDL_GetWindowID(window); e.button.which = TEST_MOUSE_ID; e.button.button = SDL_BUTTON_LEFT; e.button.state = SDL_PRESSED; e.button.clicks = 2; e.button.x = (int)p.x; e.button.y = (int)p.y; SDL_PushEvent(&e); });
                 act(3, [&]() { ImVec2 p = bodyPt("Hero"); button(false, p.x, p.y); });
                 act(3, [&]() { check(ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) && editCopy.has_value(), "double-click opens the edit popup");
                                std::snprintf(editName, sizeof(editName), "Paladin"); g_shot = "05_edit"; });
@@ -174,17 +171,6 @@
                     Encounter e5; BoardState b5; deserializeBoard(serializeBoard(e4, b4), e5, b5);
                     check(e5.getCreatures().size() == 1 && e5.getCreatures()[0].getName() == "We|ird, name: x" && e5.getCreatures()[0].getNotes() == "line1\nline|2, with: stuff" && e5.getCreatures()[0].hasCondition("Hex: custom"), "separators in names/notes/conditions survive saving");
                 });
-                // 16) Tidy board (shrinks cards to fit everything)
-                act(2, [&]() { tidyBoard(); });
-                act(40, [&]() {
-                    bool overlap = false;
-                    const ImVec2 cs = tokenSize();
-                    std::vector<ImVec2> ps; for (auto& st : board.players) ps.push_back(st.pos); for (auto& st : board.creatures) ps.push_back(st.pos);
-                    for (size_t i = 0; i < ps.size(); i++) for (size_t j = i + 1; j < ps.size(); j++)
-                        if (std::fabs(ps[i].x - ps[j].x) < cs.x && std::fabs(ps[i].y - ps[j].y) < cs.y) overlap = true;
-                    bool inside = true; for (auto& p : ps) if (p.y + cs.y > g_boardSize.y + 1 || p.x + cs.x > g_boardSize.x + 1) inside = false;
-                    check(!overlap && inside, "Tidy board: no overlaps, all inside (card size " + std::to_string((int)std::lround(g_cardScale * 100)) + "%)");
-                    g_shot = "09_tidy"; });
                 // 17) Tabs (the content slides in, so shots wait for it to settle)
                 act(3, [&]() { g_forceTab = 1; });
                 act(4, [&]() { g_shot = "12_tab_sliding"; });
@@ -202,12 +188,104 @@
                 waitSeconds(0.6);
                 act(1, [&]() { g_shot = "11_death_c"; });
                 waitSeconds(0.8);
-                act(1, [&]() { CardState& st = board.get(findRef("Goblin 2")); check(st.deathT >= DEATH_LEN, "death animation finishes and stays dead"); });
+                act(1, [&]() { CardState& st = board.get(findRef("Goblin 2")); check(st.deathT >= DEATH_LEN, "death animation finishes and stays dead"); check(st.column == 1, "a dead card falls to the Defeated column"); });
                 cmdKey(SDLK_z, SDL_SCANCODE_Z);  // undo the kill
                 act(2, [&]() { check(C("Goblin 2")->getCurrentHp() > 0, "undo brings Goblin 2 back"); });
                 cmdKey(SDLK_y, SDL_SCANCODE_Y);  // redo it
                 act(2, [&]() { CardState& st = board.get(findRef("Goblin 2")); check(C("Goblin 2")->getCurrentHp() == 0 && st.wasDead && st.deathT >= DEATH_LEN, "redo shows it dead without replaying the animation"); });
-                // 18) Alerts fade out on their own
+                // 18) Turn order: fresh scenario Aria (player), Bram, Cora (creatures), Dax (player)
+                static auto turnIs = [&](const std::string& n) { return board.turnValid && board.turn == findRef(n); };
+                static auto zIndex = [&](const std::string& n) { CardRef r = findRef(n); for (size_t i = 0; i < board.z.size(); i++) if (board.z[i] == r) return (int)i; return -1; };
+                act(2, [&]() {
+                    encounter.clear(); board = BoardState(); undoStack.clear(); redoStack.clear(); clearSelection();
+                    Creature a("Aria", 20); a.setLevel(3); a.setAc(15);
+                    Creature b("Bram", 20); Creature c("Cora", 20); Creature d("Dax", 20); d.setLevel(3);
+                    addCombatant(encounter, board, Side::Players, a, ImVec2(0, 0));
+                    addCombatant(encounter, board, Side::Creatures, b, ImVec2(0, 0));
+                    addCombatant(encounter, board, Side::Creatures, c, ImVec2(0, 0));
+                    addCombatant(encounter, board, Side::Players, d, ImVec2(0, 0));
+                });
+                act(30, [&]() { g_scrollTo = "Next turn"; });
+                act(2, [&]() { check(turnIs("Aria"), "the first combatant standing holds the turn"); g_shot = "13_turns"; });
+                clickAt([=]() { return rectCenter("Next turn"); });
+                act(2, [&]() { check(turnIs("Bram") && board.round == 1, "Next turn passes to Bram, round untouched"); });
+                clickAt([=]() { return rectCenter("Next turn"); });
+                clickAt([=]() { return rectCenter("Next turn"); });
+                act(2, [&]() { check(turnIs("Dax"), "Next turn x3 reaches Dax"); });
+                clickAt([=]() { return rectCenter("Next turn"); });
+                act(2, [&]() { check(turnIs("Aria") && board.round == 1, "Next turn wraps around to Aria, round still 1"); });
+                steps.push_back({1, [=]() { key(true, SDLK_SPACE, SDL_SCANCODE_SPACE, 0); }});
+                steps.push_back({3, [=]() { key(false, SDLK_SPACE, SDL_SCANCODE_SPACE, 0); }});
+                act(2, [&]() { check(turnIs("Bram"), "Space also passes the turn"); });
+                // The ribbon on the active card passes the turn too.
+                act(20, [&]() {});
+                clickAt([&]() { return CS("Bram").turnCenter; });
+                act(2, [&]() { check(turnIs("Cora"), "clicking the TURN ribbon passes the turn"); });
+                // Kill Cora (the card holding the turn): she falls to Defeated, keeping her slot.
+                act(2, [&]() { pushUndo(); applyHit(findRef("Cora"), 99); });
+                waitSeconds(1.7);
+                act(1, [&]() { check(CS("Cora").column == 1 && zIndex("Cora") == 2, "a killed enemy falls to Defeated (slot kept in the order)");
+                               check(turnIs("Dax"), "the turn moves on by itself when its card is defeated"); });
+                cmdKey(SDLK_z, SDL_SCANCODE_Z);
+                waitSeconds(0.4);
+                act(1, [&]() { check(C("Cora")->getCurrentHp() == 20 && CS("Cora").column == 0 && zIndex("Cora") == 2, "undo brings her back to her old slot"); });
+                // Mid-fall: the card is still visible while it crosses to the Defeated column.
+                act(2, [&]() { pushUndo(); applyHit(findRef("Bram"), 99); });
+                waitSeconds(1.0);
+                act(1, [&]() { g_shot = "14_dying"; });
+                waitSeconds(0.82);
+                act(1, [&]() { g_shot = "14_defeated"; });
+                waitSeconds(0.9);
+                cmdKey(SDLK_z, SDL_SCANCODE_Z);
+                waitSeconds(0.4);
+                // Dead cards are skipped by Next turn.
+                act(2, [&]() { pushUndo(); applyHit(findRef("Cora"), 99); });
+                waitSeconds(1.7);
+                act(1, [&]() { startTurnAt(findRef("Bram")); });
+                act(3, [&]() { g_scrollTo = "Next turn"; });
+                clickAt([=]() { return rectCenter("Next turn"); });
+                act(2, [&]() { check(turnIs("Dax"), "Next turn skips the defeated card"); });
+                // A dying player (0 HP, death saves) stays in the Turn order.
+                act(2, [&]() { pushUndo(); applyHit(findRef("Dax"), 20); });  // exactly max HP: dying, not massive damage
+                waitSeconds(1.7);
+                act(1, [&]() { check(C("Dax")->getCurrentHp() == 0 && CS("Dax").column == 0, "a dying player stays in the Turn order"); });
+                // Reorder by dragging Bram above Aria.
+                static ImVec2 dragFrom, dragTo;
+                act(1, [&]() { dragFrom = bodyPt("Bram"); dragTo = ImVec2(CS("Aria").drawPos.x + CS("Aria").size.x * 0.45f, CS("Aria").drawPos.y - 4 * s); });
+                act(2, [&]() { motion(dragFrom.x, dragFrom.y); button(true, dragFrom.x, dragFrom.y); });
+                act(3, [&]() { motion(dragFrom.x, (dragFrom.y + dragTo.y) / 2); });
+                act(3, [&]() { motion(dragTo.x, dragTo.y); });
+                act(1, [&]() { g_shot = "15_reorder"; });
+                act(3, [&]() { button(false, dragTo.x, dragTo.y); });
+                waitSeconds(0.5);
+                act(1, [&]() { check(zIndex("Bram") == 0 && zIndex("Aria") == 1, "dragging Bram above Aria reorders the Turn order"); });
+                act(1, [&]() {
+                    const std::string text = serializeBoard(encounter, board);
+                    Encounter e2; BoardState b2;
+                    check(deserializeBoard(text, e2, b2) && serializeBoard(e2, b2) == text, "order and turn survive save and load");
+                    const Creature* first = e2.at(b2.z[0].side, b2.z[0].index);
+                    check(first && first->getName() == "Bram" && b2.turnValid && e2.at(b2.turn.side, b2.turn.index)->getName() == "Dax", "loaded order starts with Bram, turn still on Dax");
+                    // A save from the old free board (no T line) still loads.
+                    Encounter e3; BoardState b3;
+                    check(deserializeBoard("HPTRACKER 2\nR|3\nE|0\nP|Old|10|10|120.5|40.0|0|10|30|10|1|-1|0|0|0|0||\nC|Gob|7|7|300|80|0|12|30|9|1|2|0|0|0|0||\n", e3, b3)
+                          && b3.z.size() == 2 && b3.round == 3 && !b3.turnValid, "saves from the free board still load");
+                });
+                // Right-click on empty space opens the board menu.
+                act(1, [&]() { CardState& last = CS("Dax"); dragTo = ImVec2(last.drawPos.x + last.size.x * 0.5f, last.drawPos.y + last.size.y + 24 * s); });
+                act(2, [&]() { motion(dragTo.x, dragTo.y); SDL_Event e{}; e.type = SDL_MOUSEBUTTONDOWN; e.button.windowID = SDL_GetWindowID(window); e.button.which = TEST_MOUSE_ID; e.button.button = SDL_BUTTON_RIGHT; e.button.state = SDL_PRESSED; e.button.clicks = 1; e.button.x = (int)dragTo.x; e.button.y = (int)dragTo.y; SDL_PushEvent(&e); });
+                act(2, [&]() { SDL_Event e{}; e.type = SDL_MOUSEBUTTONUP; e.button.windowID = SDL_GetWindowID(window); e.button.which = TEST_MOUSE_ID; e.button.button = SDL_BUTTON_RIGHT; e.button.state = SDL_RELEASED; e.button.x = (int)dragTo.x; e.button.y = (int)dragTo.y; SDL_PushEvent(&e); });
+                act(3, [&]() { check(ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) && boardMenuSlot >= 0, "right-click on empty space opens the board menu (slot " + std::to_string(boardMenuSlot) + ")"); g_shot = "16_board_menu"; });
+                act(3, [&]() { key(true, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
+                act(3, [&]() { key(false, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
+                // New character dialog: creates the card at the chosen slot.
+                act(2, [&]() { openNewChar = true; newCharFocus = false; newCharSlot = 1; std::snprintf(newName, sizeof(newName), "Zed"); newSide = 1; newCount = 1; });
+                act(4, [&]() { g_shot = "17_new_character"; });
+                clickAt([=]() { return rectCenter("Create"); });
+                act(3, [&]() { check(exists("Zed") && zIndex("Zed") == 1 && CS("Zed").selected, "New character creates the card at the chosen slot"); });
+                act(70, [&]() { g_scrollTo.clear(); clearSelection(); motion(g_boardOrigin.x + g_boardSize.x - 60 * s, g_boardOrigin.y + g_boardSize.y * 0.5f); });
+                act(1, [&]() { g_shot = "18_final"; });
+
+                // 19) Alerts fade out on their own
                 act(2, [&]() { addAlert("Fade test", COL_AMBER); });
                 waitSeconds(1.5);
                 act(1, [&]() { const Alert* a = alertNamed("Fade test"); check(a && alertOpacity(*a, ImGui::GetTime()) == 1.0f, "alert fully visible after 1.5 s"); });

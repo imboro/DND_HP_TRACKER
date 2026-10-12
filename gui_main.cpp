@@ -92,8 +92,24 @@ static const float DEATH_LEN = 1.4f;   // death: thud, cross, strike-through, fl
 static const float SPAWN_TIME = 0.32f; // fade-in + drop when a card is added
 
 struct CardState {
-    ImVec2 pos = ImVec2(0, 0);      // top-left inside the board
+    ImVec2 pos = ImVec2(0, 0);      // top-left inside the board (animated toward `target`)
     ImVec2 drawPos = ImVec2(0, 0);  // on-screen top-left last frame (after shake)
+
+    // Column layout (set by the board layout every frame).
+    ImVec2 target = ImVec2(0, 0);   // where the card wants to be (board coordinates)
+    ImVec2 size = ImVec2(0, 0);     // card size in pixels
+    bool placed = false;            // false until the first layout (then snaps, no glide)
+    int column = 0;                 // 0 = Turn order, 1 = Defeated
+    ImVec2 clipMin = ImVec2(0, 0);  // screen rect of the column's card area (hit testing)
+    ImVec2 clipMax = ImVec2(0, 0);
+    float turnAnim = 0.0f;          // 0..1: how much this card holds the turn marker
+
+    // Screen positions of its buttons last frame (hit testing and UI tests).
+    ImVec2 damageCenter = ImVec2(0, 0);
+    ImVec2 healCenter = ImVec2(0, 0);
+    ImVec2 turnCenter = ImVec2(0, 0);
+    ImVec2 pipCenter[6];
+    bool hasPips = false;
 
     // HP change animation.
     int lastHp = -1;     // last seen actual HP, used to detect changes
@@ -134,10 +150,17 @@ struct CardState {
 struct BoardState {
     std::vector<CardState> players;
     std::vector<CardState> creatures;
-    std::vector<CardRef> z;  // back to front
+    std::vector<CardRef> z;  // turn order, first to last
     CardRef drag{Side::Players, 0};  // card dragged last frame, if dragValid
     bool dragValid = false;
     int round = 1;
+
+    // Whose turn it is (a member of z), if any.
+    CardRef turn{Side::Players, 0};
+    bool turnValid = false;
+    // Vertical scroll of the two columns (0 = Turn order, 1 = Defeated).
+    float scroll[2] = {0.0f, 0.0f};
+    float scrollTarget[2] = {0.0f, 0.0f};
 
     std::vector<CardState>& of(Side side) {
         return side == Side::Players ? players : creatures;
@@ -901,12 +924,11 @@ static void drawCardEffects(const CardState& st, ImVec2 size, float S) {
 
 // ---- Cards -----------------------------------------------------------------
 
-static const float CARD_W = 240.0f;
-static const float CARD_H = 186.0f;
-static const float TAB_H = 14.0f;
+// Cards are as wide as their column; their height scales with the card size setting.
+static const float CARD_H = 106.0f;
 
-static ImVec2 tokenSize() {
-    return ImVec2(CARD_W * cardS(), CARD_H * cardS());
+static float cardHeight() {
+    return CARD_H * cardS();
 }
 
 struct Chip {
@@ -1021,24 +1043,25 @@ struct CardActions {
     std::function<void(CardRef)> damage;
     std::function<void(CardRef)> heal;
     std::function<void(CardRef, int, int)> setDeathSaves;
+    std::function<void()> nextTurn;
 };
 
-// Draws one draggable creature card on the board and handles its buttons.
-// `interactive` is false for cards hidden under another card at the mouse
-// position, so only the front card receives the press.
+// Draws one compact creature card (it lives in a column of the board) and
+// handles its buttons. `interactive` is false for cards hidden under another
+// card at the mouse position, so only the front card receives the press.
+// `isTurn` marks the card that holds the turn (it steps forward and wears a
+// "TURN" ribbon that advances the turn when clicked).
 static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 boardOrigin,
-                      ImVec2 boardSize, const std::string& amountLabel, bool interactive,
+                      const std::string& amountLabel, bool interactive, bool isTurn,
                       const CardActions& act) {
     const Creature& c = *encounter.at(ref.side, ref.index);
     const Side side = ref.side;
-    const ImVec2 size = tokenSize();
+    const ImVec2 size = st.size;
     const float S = cardS();
-    const float pad = 12 * S;
+    const float pad = 10 * S;
     bool showTooltip = false;
-    const float round = 16 * S;
-    const float outline = 2.0f * S;
-    const float shadow = 7 * S;
-    const float tabH = TAB_H * S;
+    const float round = 14 * S;
+    const float outline = (isTurn ? 3.0f : 2.0f) * S;
     const float time = static_cast<float>(ImGui::GetTime());
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
@@ -1072,10 +1095,8 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     // 0 = alive look, 1 = fully dead look (fades in over half a second).
     const float deadK = showDead ? easeOutCubic(clamp01(st.deathT / 0.55f)) : 0.0f;
     const float spawnK = easeOutCubic(clamp01(st.spawnT / SPAWN_TIME));
+    st.turnAnim = approach(st.turnAnim, isTurn ? 1.0f : 0.0f, 16.0f, dt);
 
-    // Keep the card (including its tab and shadow) inside the board.
-    pos.x = std::clamp(pos.x, 0.0f, std::max(0.0f, boardSize.x - size.x - shadow));
-    pos.y = std::clamp(pos.y, tabH, std::max(tabH, boardSize.y - size.y - shadow));
     const ImVec2 shake = shakeOffset(st, S);
     // Dying thuds the card down a few pixels before it settles; new cards drop in from above.
     float thud = 0.0f;
@@ -1135,11 +1156,11 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     }
     dl->AddRect(p, pEnd, outlineCol, round, 0, outline);
 
-    // Icon tile (top-left): soft tinted square with a line glyph in the side's color.
-    const float iconSize = 38 * S;
-    const ImVec2 iconMin(p.x + pad, p.y + pad + 3 * S);
+    // Row 1, left: icon tile with a line glyph in the side's color.
+    const float iconSize = 34 * S;
+    const ImVec2 iconMin(p.x + pad, p.y + pad);
     const ImVec2 iconMax(iconMin.x + iconSize, iconMin.y + iconSize);
-    dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, 30), 11 * S);
+    dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, 30), 10 * S);
     const ImVec2 glyphOrigin(iconMin.x + iconSize * 0.15f, iconMin.y + iconSize * 0.15f);
     const float glyphSize = iconSize * 0.7f;
     // On death the heart/bolt fades out while a cross is drawn over it stroke by stroke.
@@ -1153,31 +1174,31 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
                          easeOutCubic(clamp01((st.deathT - 0.14f) / 0.16f)));
     }
 
-    // Quick stats next to the icon: HP (+temp), then AC / speed / passive perception.
     const float lineH = ImGui::GetTextLineHeight();
-    const ImVec2 statsPos(iconMax.x + 10 * S, iconMin.y);
+    const float textX = iconMax.x + 10 * S;
+
+    // Row 1, right: HP (+temp), right-aligned.
+    float hpLeft = pEnd.x - pad;
     {
         const std::string cur = std::to_string(c.getCurrentHp());
         const std::string rest = " / " + std::to_string(c.getMaxHp()) + " HP";
-        const ImVec2 cs = heavyTextSize(cur.c_str());
-        heavyText(dl, statsPos, mixColor(COL_TEXT, COL_MUTED, deadK), cur.c_str());
-        const float restX = statsPos.x + cs.x;
-        dl->AddText(ImVec2(restX, statsPos.y), COL_MUTED, rest.c_str());
-        if (c.getTempHp() > 0) {
-            const std::string tempText = " +" + std::to_string(c.getTempHp()) + " temp";
-            dl->AddText(ImVec2(restX + ImGui::CalcTextSize(rest.c_str()).x, statsPos.y), COL_TEMP, tempText.c_str());
-        }
+        const std::string tempText = c.getTempHp() > 0 ? "  +" + std::to_string(c.getTempHp()) + " temp" : "";
+        const float wCur = heavyTextSize(cur.c_str()).x;
+        const float wRest = ImGui::CalcTextSize(rest.c_str()).x;
+        const float wTemp = tempText.empty() ? 0.0f : ImGui::CalcTextSize(tempText.c_str()).x;
+        hpLeft = pEnd.x - pad - (wCur + wRest + wTemp);
+        const ImVec2 hp(hpLeft, p.y + pad);
+        heavyText(dl, hp, mixColor(COL_TEXT, COL_MUTED, deadK), cur.c_str());
+        dl->AddText(ImVec2(hp.x + wCur, hp.y), COL_MUTED, rest.c_str());
+        if (!tempText.empty()) dl->AddText(ImVec2(hp.x + wCur + wRest, hp.y), COL_TEMP, tempText.c_str());
     }
-    const std::string statLine = "AC " + std::to_string(c.getAc()) + "  \xC2\xB7  " + std::to_string(c.getSpeed()) +
-                                 " ft  \xC2\xB7  PP " + std::to_string(c.getPassivePerception());
-    dl->AddText(ImVec2(statsPos.x, statsPos.y + lineH + 2 * S), COL_MUTED, statLine.c_str());
 
-    // Name, heavy, with a strike-through when dead.
+    // Name (heavy, struck through when dead) with AC / speed / passive perception below.
     const std::string& name = c.getName();
     const float nameMul = 1.2f;
     const float nameDraw = 1.08f;  // the heavy face runs wide; slightly smaller than the slot
-    const ImVec2 namePos(p.x + pad, iconMax.y + 6 * S);
-    dl->PushClipRect(ImVec2(p.x, p.y), ImVec2(pEnd.x - (c.getCurrentHp() == 0 && side == Side::Players ? 105 * S : pad), pEnd.y), true);
+    const ImVec2 namePos(textX, p.y + pad - 1 * S);
+    dl->PushClipRect(ImVec2(textX, p.y), ImVec2(std::max(textX + 20 * S, hpLeft - 8 * S), pEnd.y), true);
     heavyText(dl, namePos + ImVec2(0, 1 * S), mixColor(COL_TEXT, COL_MUTED, deadK), name.c_str(), nameDraw);
     dl->PopClipRect();
     if (showDead) {
@@ -1185,15 +1206,19 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
         const float strike = easeOutCubic(clamp01((st.deathT - 0.25f) / 0.3f));
         const ImVec2 ns = heavyTextSize(name.c_str(), nameDraw);
         const float y = namePos.y + 1 * S + ns.y * 0.55f;
-        const float x1 = std::min(namePos.x + ns.x, pEnd.x - pad);
+        const float x1 = std::min(namePos.x + ns.x, std::max(textX + 20 * S, hpLeft - 8 * S));
         if (strike > 0.0f) {
             dl->AddLine(ImVec2(namePos.x, y), ImVec2(lerpf(namePos.x, x1, strike), y), COL_MUTED, 1.5f * S);
         }
     }
+    const std::string statLine = "AC " + std::to_string(c.getAc()) + "  \xC2\xB7  " + std::to_string(c.getSpeed()) +
+                                 " ft  \xC2\xB7  PP " + std::to_string(c.getPassivePerception());
+    const float line2Y = namePos.y + lineH * nameMul + 1 * S;
+    dl->AddText(ImVec2(textX, line2Y), COL_MUTED, statLine.c_str());
 
     // HP bar: a pill with an ink outline; temp HP as a blue strip below.
-    const float barTop = namePos.y + lineH * nameMul + 8 * S;
-    const float barHeight = 14 * S;
+    const float barTop = p.y + pad + iconSize + 8 * S;
+    const float barHeight = 12 * S;
     const float barRound = barHeight * 0.5f;
     const ImVec2 barMin(p.x + pad, barTop);
     const ImVec2 barMax(pEnd.x - pad, barTop + barHeight);
@@ -1228,39 +1253,45 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     if (c.getTempHp() > 0) {
         const float frac = std::min(1.0f, static_cast<float>(c.getTempHp()) / static_cast<float>(c.getMaxHp()));
         const ImVec2 tMin(barMin.x + 2 * S, barMax.y + 3 * S);
-        const ImVec2 tMax(barMin.x + 2 * S + std::max(6 * S, (barW - 4 * S) * frac), barMax.y + 8 * S);
+        const ImVec2 tMax(barMin.x + 2 * S + std::max(6 * S, (barW - 4 * S) * frac), barMax.y + 7 * S);
         dl->AddRectFilled(tMin, tMax, COL_TEMP, 3 * S);
     }
 
-    // Damage / Heal buttons.
-    const float buttonWidth = (size.x - pad * 2 - 10 * S - 3 * S) * 0.5f;
-    const float buttonHeight = 28 * S;
-    const float buttonsY = barMax.y + 12 * S;
+    // Row 3: Damage / Heal buttons, then the status chips.
+    const float buttonWidth = 84 * S;
+    const float buttonHeight = 24 * S;
+    const float buttonGap = 8 * S;
+    const float buttonsY = barMax.y + 11 * S;
     ImGui::SetCursorScreenPos(ImVec2(p.x + pad, buttonsY));
     const std::string damageLabel = "Damage " + amountLabel + "##dmg";
     const std::string healLabel = "Heal " + amountLabel + "##heal";
+    st.damageCenter = ImVec2(p.x + pad + buttonWidth * 0.5f, buttonsY + buttonHeight * 0.5f);
+    st.healCenter = ImVec2(p.x + pad + buttonWidth + buttonGap + buttonWidth * 0.5f, buttonsY + buttonHeight * 0.5f);
     // Covered cards only draw their buttons (no ImGui item), so they can't
     // steal the press from the card in front.
     if (flatButton(damageLabel.c_str(), ImVec2(buttonWidth, buttonHeight), BTN_RED, true, interactive)) {
         act.damage(ref);
     }
-    ImGui::SetCursorScreenPos(ImVec2(p.x + pad + buttonWidth + 10 * S, buttonsY));
+    ImGui::SetCursorScreenPos(ImVec2(p.x + pad + buttonWidth + buttonGap, buttonsY));
     if (flatButton(healLabel.c_str(), ImVec2(buttonWidth, buttonHeight), BTN_GREEN, true, interactive)) {
         act.heal(ref);
     }
 
     // Death saves (players at 0 HP): 3 successes, 3 failures, click to set.
-    if (side == Side::Players && c.getCurrentHp() == 0) {
+    st.hasPips = side == Side::Players && c.getCurrentHp() == 0;
+    if (st.hasPips) {
         const float d = 13 * S;
         const float gap = 4 * S;
         const float groupGap = 12 * S;
-        const float cy = namePos.y + lineH * nameMul * 0.5f;
+        const float cy = line2Y + lineH * 0.5f;
         float x = pEnd.x - pad - (d * 6 + gap * 4 + groupGap);
+        int pip = 0;
         for (int group = 0; group < 2; group++) {
             const bool success = group == 0;
             const int have = success ? c.getDeathSuccesses() : c.getDeathFailures();
             for (int i = 0; i < 3; i++) {
                 const ImVec2 center(x + d * 0.5f, cy);
+                st.pipCenter[pip++] = center;
                 const bool filled = i < have;
                 dl->AddCircleFilled(center, d * 0.5f, filled ? (success ? COL_GREEN : COL_RED) : COL_PANEL);
                 dl->AddCircle(center, d * 0.5f, filled ? COL_INK : COL_BORDER_HI, 0, 1.5f * S);
@@ -1284,8 +1315,36 @@ static void drawToken(const Encounter& encounter, CardRef ref, CardState& st, Im
     }
 
     // Status chips: life state, bloodied, concentration, resistances, conditions, notes.
-    drawChips(dl, ImVec2(p.x + pad, buttonsY + buttonHeight + 10 * S), pEnd.x - pad,
-              cardChips(side, c, life, time), S);
+    drawChips(dl, ImVec2(p.x + pad + buttonWidth * 2 + buttonGap + 12 * S, buttonsY + (buttonHeight - 19 * S) * 0.5f),
+              pEnd.x - pad, cardChips(side, c, life, time), S);
+
+    // The turn ribbon: a black "TURN" tab on the card's top edge. Clicking it
+    // passes the turn on. Submitted before the drag handle so it wins the press.
+    if (st.turnAnim > 0.02f) {
+        const float k = easeOutCubic(st.turnAnim);
+        const float rh = 18 * S;
+        const ImVec2 tw = fontTextSize(boldFont(), "TURN", 0.78f);
+        const float rw = 14 * S + tw.x + 20 * S;
+        const ImVec2 r0(p.x + 16 * S, p.y - rh * 0.55f - (1.0f - k) * 6 * S);
+        const ImVec2 r1(r0.x + rw, r0.y + rh);
+        st.turnCenter = ImVec2((r0.x + r1.x) * 0.5f, (r0.y + r1.y) * 0.5f);
+        bool hot = false;
+        if (interactive && k > 0.9f) {
+            ImGui::SetCursorScreenPos(r0);
+            if (ImGui::InvisibleButton("turn", r1 - r0)) act.nextTurn();
+            hot = ImGui::IsItemHovered();
+            if (hot) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                ImGui::SetTooltip("Next turn (Space)");
+            }
+        }
+        dl->AddRectFilled(r0, r1, fadeAlpha(hot ? IM_COL32(64, 64, 66, 255) : COL_INK, k), rh * 0.5f);
+        const float mid = (r0.y + r1.y) * 0.5f;
+        const float tx = r0.x + 9 * S;
+        dl->AddTriangleFilled(ImVec2(tx, mid - 4 * S), ImVec2(tx, mid + 4 * S), ImVec2(tx + 7 * S, mid),
+                              fadeAlpha(COL_WHITE, k));
+        fontText(dl, boldFont(), ImVec2(tx + 12 * S, mid - tw.y * 0.5f), fadeAlpha(COL_WHITE, k), "TURN", 0.78f);
+    }
 
     // The whole card is the drag handle. It is submitted last so the buttons
     // above get hover/click priority; ImGui gives an earlier overlapping item
@@ -1362,6 +1421,10 @@ static void removeCombatant(Encounter& encounter, BoardState& board, CardRef ref
     }
     board.z = kept;
     board.dragValid = false;
+    if (board.turnValid && board.turn.side == ref.side) {
+        if (board.turn.index == ref.index) board.turnValid = false;  // re-picked by the layout
+        else if (board.turn.index > ref.index) board.turn.index--;
+    }
 }
 
 // Removes several at once (highest index first, so the others stay valid).
@@ -1483,22 +1546,29 @@ static std::string savePath(const char* file) {
 
 // Version 2, one combatant per line in stacking order:
 //   P|name|maxHp|hp|x|y|temp|ac|speed|pp|level|cr|mod|conc|deathOk|deathFail|cond:rounds,...|notes
-// plus R|round and E|ended. Version 1 lines (P|name|maxHp|hp|x|y) still load.
+// plus R|round, E|ended and T|index (whose turn it is, as an index into the lines
+// below). The x and y fields are no longer used (the order of the lines is the
+// turn order) but are still written. Version 1 lines (P|name|maxHp|hp|x|y) still load;
+// older versions of the app ignore the T line.
 static std::string serializeBoard(const Encounter& encounter, const BoardState& board) {
     std::ostringstream out;
     out << "HPTRACKER 2\n";
     out << "R|" << board.round << "\n";
     out << "E|" << (encounter.isEndedManually() ? 1 : 0) << "\n";
+    if (board.turnValid) {
+        for (size_t i = 0; i < board.z.size(); i++) {
+            if (board.z[i] == board.turn) out << "T|" << i << "\n";
+        }
+    }
     for (const CardRef& r : board.z) {
         const Creature& c = *encounter.at(r.side, r.index);
-        const CardState& st = board.of(r.side)[r.index];
         std::string conds;
         for (const Condition& cond : c.getConditions()) {
             if (!conds.empty()) conds += ",";
             conds += esc(cond.name) + ":" + std::to_string(cond.rounds);
         }
         out << (r.side == Side::Players ? 'P' : 'C') << '|' << esc(c.getName()) << '|' << c.getMaxHp() << '|'
-            << c.getCurrentHp() << '|' << st.pos.x << '|' << st.pos.y << '|' << c.getTempHp() << '|' << c.getAc()
+            << c.getCurrentHp() << "|0|0|" << c.getTempHp() << '|' << c.getAc()
             << '|' << c.getSpeed() << '|' << c.getPassivePerception() << '|' << c.getLevel() << '|'
             << c.getCrIndex() << '|' << static_cast<int>(c.getDamageMod()) << '|' << (c.isConcentrating() ? 1 : 0)
             << '|' << c.getDeathSuccesses() << '|' << c.getDeathFailures() << '|' << conds << '|'
@@ -1514,9 +1584,14 @@ static bool deserializeBoard(const std::string& text, Encounter& encounter, Boar
 
     encounter.clear();
     board = BoardState();
+    int pendingTurn = -1;
     while (std::getline(in, line)) {
         const std::vector<std::string> f = splitRaw(line, '|');
         try {
+            if (f.size() == 2 && f[0] == "T") {
+                pendingTurn = std::stoi(f[1]);
+                continue;
+            }
             if (f.size() == 2 && f[0] == "R") {
                 board.round = std::max(1, std::stoi(f[1]));
                 continue;
@@ -1552,6 +1627,10 @@ static bool deserializeBoard(const std::string& text, Encounter& encounter, Boar
         } catch (const std::exception&) {
             continue;  // skip malformed line
         }
+    }
+    if (pendingTurn >= 0 && pendingTurn < static_cast<int>(board.z.size())) {
+        board.turn = board.z[pendingTurn];
+        board.turnValid = true;
     }
     return true;
 }
@@ -1702,21 +1781,6 @@ static void drawTrash(ImVec2 min, float size, bool dragging, bool hot, int count
     }
 }
 
-// Plain light board with a faint dot grid, like graph paper. The board's
-// own child window paints the fill and the rounded ink outline.
-static void drawBoardBackground(ImVec2 origin, ImVec2 size) {
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImVec2 end(origin.x + size.x, origin.y + size.y);
-    dl->PushClipRect(origin, end, true);
-    const float grid = 32 * UI_SCALE;
-    for (float x = grid; x < size.x; x += grid) {
-        for (float y = grid; y < size.y; y += grid) {
-            dl->AddCircleFilled(ImVec2(origin.x + x, origin.y + y), 1.3f * UI_SCALE, IM_COL32(0, 0, 0, 34));
-        }
-    }
-    dl->PopClipRect();
-}
-
 // ---- Small widgets -------------------------------------------------------------
 
 static bool crCombo(const char* label, int* index) {
@@ -1856,52 +1920,8 @@ int main(int, char**) {
 
     Encounter encounter;
     BoardState board;
-    // New cards go to the first free grid spot on the board (cascading if it's full).
-    ImVec2 lastBoardSize(900, 850);  // updated every frame once the board is laid out
-    auto spawnPos = [&]() {
-        const ImVec2 cs = tokenSize();
-        const float tab = TAB_H * cardS();
-        const float pitchX = cs.x + 30 * S, pitchY = cs.y + tab + 22 * S;
-        const int cols = std::max(1, static_cast<int>((lastBoardSize.x - 20 * S) / pitchX));
-        const int rows = std::max(1, static_cast<int>((lastBoardSize.y - 30 * S) / pitchY));
-        auto isFree = [&](ImVec2 p) {
-            for (const std::vector<CardState>* list : {&board.players, &board.creatures}) {
-                for (const CardState& o : *list) {
-                    const bool overlap = p.x < o.pos.x + cs.x && p.x + cs.x > o.pos.x &&
-                                         p.y - tab < o.pos.y + cs.y && p.y + cs.y > o.pos.y - tab;
-                    if (overlap) return false;
-                }
-            }
-            return true;
-        };
-        for (int r = 0; r < rows; r++) {
-            for (int c = 0; c < cols; c++) {
-                const ImVec2 p(20 * S + c * pitchX, 22 * S + tab + r * pitchY);
-                if (isFree(p)) return p;
-            }
-        }
-        // Board is full: take the spot that overlaps existing cards the least.
-        ImVec2 best(20 * S, 22 * S + tab);
-        float bestOverlap = FLT_MAX;
-        const float step = 24 * S;
-        for (float y = 22 * S + tab; y + cs.y <= lastBoardSize.y; y += step) {
-            for (float x = 20 * S; x + cs.x <= lastBoardSize.x; x += step) {
-                float overlap = 0.0f;
-                for (const std::vector<CardState>* list : {&board.players, &board.creatures}) {
-                    for (const CardState& o : *list) {
-                        const float w = std::min(x + cs.x, o.pos.x + cs.x) - std::max(x, o.pos.x);
-                        const float h = std::min(y + cs.y, o.pos.y + cs.y) - std::max(y - tab, o.pos.y - tab);
-                        if (w > 0 && h > 0) overlap += w * h;
-                    }
-                }
-                if (overlap < bestOverlap) {
-                    bestOverlap = overlap;
-                    best = ImVec2(x, y);
-                }
-            }
-        }
-        return best;
-    };
+    // Cards live in columns now, so their position is decided by the layout.
+    auto spawnPos = []() { return ImVec2(0, 0); };
 
     // ---- Log & alerts
     std::vector<LogEntry> log;
@@ -2068,39 +2088,6 @@ int main(int, char**) {
                COL_TEMP);
     };
 
-    // Lays every card out in a grid (party first, enemies from a new row),
-    // shrinking the cards if they wouldn't fit otherwise.
-    auto tidyBoard = [&]() {
-        pushUndo();
-        const int nPlayers = static_cast<int>(board.players.size());
-        const int nCreatures = static_cast<int>(board.creatures.size());
-        auto layoutFits = [&](int* colsOut) {
-            const ImVec2 cs = tokenSize();
-            const float tab = TAB_H * cardS();
-            const float pitchX = cs.x + 24 * S, pitchY = cs.y + tab + 18 * S;
-            const int cols = std::max(1, static_cast<int>((lastBoardSize.x - 16 * S + 24 * S) / pitchX));
-            const int rows = (nPlayers + cols - 1) / cols + (nCreatures + cols - 1) / cols;
-            *colsOut = cols;
-            return 14 * S + rows * pitchY <= lastBoardSize.y + 4 * S;
-        };
-        int cols = 1;
-        while (!layoutFits(&cols) && g_cardScale > 0.6f + 0.001f) {
-            g_cardScale = std::max(0.6f, g_cardScale - 0.05f);
-        }
-        saveSettings();
-        const ImVec2 cs = tokenSize();
-        const float tab = TAB_H * cardS();
-        const float pitchX = cs.x + 24 * S, pitchY = cs.y + tab + 18 * S;
-        for (int i = 0; i < nPlayers; i++) {
-            board.players[i].pos = ImVec2(16 * S + (i % cols) * pitchX, 14 * S + tab + (i / cols) * pitchY);
-        }
-        const int firstEnemyRow = (nPlayers + cols - 1) / cols;
-        for (int i = 0; i < nCreatures; i++) {
-            board.creatures[i].pos = ImVec2(16 * S + (i % cols) * pitchX,
-                                            14 * S + tab + (firstEnemyRow + i / cols) * pitchY);
-        }
-    };
-
     // ---- Selection
     auto selectedRefs = [&]() {
         std::vector<CardRef> refs;
@@ -2116,6 +2103,92 @@ int main(int, char**) {
     auto selectAll = [&]() {
         for (CardState& s : board.players) s.selected = true;
         for (CardState& s : board.creatures) s.selected = true;
+    };
+
+    // ---- Turn order (board.z is the order, top to bottom; board.turn holds the turn)
+    bool scrollToTurn = false;   // bring the card that holds the turn into view
+    int dragSlot = -1;           // Turn order slot the dragged card would drop into
+    bool openBoardMenu = false;  // right-click on empty space
+    int boardMenuSlot = -1;      // Turn order slot under that right-click (-1 = at the end)
+
+    auto isDefeated = [&](CardRef r) {
+        const Creature* c = encounter.at(r.side, r.index);
+        return c != nullptr && lifeOf(r.side, *c) == Life::Dead;
+    };
+    // Keeps the turn marker valid: when nobody has it, the first card still standing
+    // gets it; when the card that holds it has been defeated, it moves on to the next
+    // one standing (the defeated card has left the Turn order, so a marker left on it
+    // would be invisible).
+    auto ensureTurn = [&]() {
+        const int n = static_cast<int>(board.z.size());
+        if (board.turnValid && !board.get(board.turn).wasDead) return;
+        int start = -1;
+        if (board.turnValid) {
+            for (int i = 0; i < n; i++) {
+                if (board.z[i] == board.turn) start = i;
+            }
+        }
+        for (int step = 1; step <= n; step++) {
+            const CardRef cand = board.z[((start + step) % n + n) % n];
+            if (!isDefeated(cand) && !board.get(cand).wasDead) {
+                const bool moved = board.turnValid;
+                board.turn = cand;
+                board.turnValid = true;
+                if (moved) {
+                    scrollToTurn = true;
+                    addLog("Turn: " + encounter.at(cand.side, cand.index)->getName(), COL_MUTED);
+                }
+                return;
+            }
+        }
+    };
+    // Passes the turn to the next combatant still standing, wrapping around.
+    // The round is not touched: rounds are ended by hand.
+    auto nextTurn = [&]() {
+        const int n = static_cast<int>(board.z.size());
+        if (n == 0) return;
+        int start = -1;
+        if (board.turnValid) {
+            for (int i = 0; i < n; i++) {
+                if (board.z[i] == board.turn) start = i;
+            }
+        }
+        for (int step = 1; step <= n; step++) {
+            const CardRef cand = board.z[((start + step) % n + n) % n];
+            if (isDefeated(cand)) continue;
+            pushUndo();
+            board.turn = cand;
+            board.turnValid = true;
+            scrollToTurn = true;
+            addLog("Turn: " + encounter.at(cand.side, cand.index)->getName(), COL_MUTED);
+            return;
+        }
+    };
+    auto startTurnAt = [&](CardRef r) {
+        pushUndo();
+        board.turn = r;
+        board.turnValid = true;
+        scrollToTurn = true;
+        addLog("Turn: " + encounter.at(r.side, r.index)->getName(), COL_MUTED);
+    };
+    // Moves a card to slot `slot` of the Turn order (0 = first), among the cards that
+    // are not defeated.
+    auto placeInTurnOrder = [&](CardRef r, int slot) {
+        std::vector<CardRef> others;
+        for (const CardRef& o : board.z) {
+            if (!(o == r) && board.get(o).column == 0) others.push_back(o);
+        }
+        slot = std::clamp(slot, 0, static_cast<int>(others.size()));
+        board.z.erase(std::remove(board.z.begin(), board.z.end(), r), board.z.end());
+        if (others.empty()) {
+            board.z.push_back(r);
+        } else if (slot < static_cast<int>(others.size())) {
+            const auto at = std::find(board.z.begin(), board.z.end(), others[slot]);
+            board.z.insert(at, r);
+        } else {
+            const auto at = std::find(board.z.begin(), board.z.end(), others.back());
+            board.z.insert(at + 1, r);
+        }
     };
 
     // ---- Structural actions
@@ -2154,14 +2227,17 @@ int main(int, char**) {
         pushUndo();
         const std::vector<std::string> names = makeNumberedNames(encounter, t.name, count);
         clearSelection();
+        std::vector<CardRef> added;
         for (size_t i = 0; i < names.size(); i++) {
             Creature c = creatureFromTemplate(t);
             c.rename(names[i]);
             const CardRef r = addCombatant(encounter, board, side, c, spawnPos());
             board.get(r).selected = true;
             board.get(r).spawnT = -0.06f * static_cast<float>(i);  // staggered fade-in
+            added.push_back(r);
         }
         addLog("Added " + std::to_string(count) + " x " + t.name, COL_MUTED);
+        return added;
     };
 
     // ---- Popup state
@@ -2175,6 +2251,10 @@ int main(int, char**) {
     bool openMenu = false;
     CardRef menuRef{Side::Players, 0};
     bool openNewEncounter = false;
+    bool openNewChar = false;     // "New character" dialog
+    bool newCharFocus = false;    // focus the name field when it opens
+    int newCharSlot = -1;         // Turn order slot to insert the new cards at (-1 = end)
+    bool newSaveLib = false;      // also save a new creature to the monster library
 
     // ---- Board interaction state
     bool marqueeActive = false;
@@ -2192,7 +2272,7 @@ int main(int, char**) {
     int libraryCount = 1;
     int selCondition = 10;  // Poisoned
     int selRounds = 0;
-    int activeTab = 0;      // 0 Combat, 1 Add, 2 Log
+    int activeTab = 0;      // 0 Combat, 1 Library, 2 Log
     int shownTab = 0;       // tab the content animation last started for
     double tabSwitchTime = -10.0;
     float tabSlideDir = 1.0f;  // +1: new content comes from the right, -1: from the left
@@ -2231,6 +2311,8 @@ int main(int, char**) {
                     selectAll();
                 } else if (mod && ImGui::IsKeyPressed(ImGuiKey_D, false)) {
                     duplicate(selectedRefs());
+                } else if (ImGui::IsKeyPressed(ImGuiKey_Space, false) || ImGui::IsKeyPressed(ImGuiKey_RightArrow, false)) {
+                    nextTurn();
                 } else if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
                     clearSelection();
                 } else if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) || ImGui::IsKeyPressed(ImGuiKey_Backspace, false)) {
@@ -2343,7 +2425,7 @@ int main(int, char**) {
         }
 
         ImGui::Dummy(ImVec2(0, 2 * S));
-        static const char* const TAB_LABELS[] = {"Combat", "Add", "Log"};
+        static const char* const TAB_LABELS[] = {"Combat", "Library", "Log"};
         segmentedTabs(TAB_LABELS, 3, &activeTab, S);
         ImGui::Dummy(ImVec2(0, 2 * S));
         // Switching tabs slides the new content in from the side of its tab while it fades in.
@@ -2452,8 +2534,13 @@ int main(int, char**) {
                 endSection();
 
                 // ---- Rounds.
-                beginSection("Rounds");
+                beginSection("Turns & rounds");
                 {
+                    if (primaryButton("Next turn", ImVec2(rowButtonWidth(1), 0))) nextTurn();
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Passes the turn to the next combatant (Space).");
+                    const std::string turnName = board.turnValid && encounter.at(board.turn.side, board.turn.index)
+                        ? encounter.at(board.turn.side, board.turn.index)->getName() : std::string("-");
+                    ImGui::TextDisabled("Turn: %s", turnName.c_str());
                     const float w2 = rowButtonWidth(2);
                     if (primaryButton("End round", ImVec2(w2, 0))) {
                         pushUndo();
@@ -2479,10 +2566,6 @@ int main(int, char**) {
                     if (ImGui::SliderInt("Card size", &percent, 60, 100, "%d%%")) {
                         g_cardScale = static_cast<float>(percent) / 100.0f;
                         saveSettings();
-                    }
-                    if (quietButton("Tidy board", ImVec2(rowButtonWidth(1), 0))) tidyBoard();
-                    if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip("Lines up every card (party first), shrinking them if needed to fit.");
                     }
                 }
                 endSection();
@@ -2531,65 +2614,9 @@ int main(int, char**) {
                 ImGui::EndChild();
             }
 
-            // ================= Add tab =================
+            // ================= Library tab =================
             if (activeTab == 1) {
                 ImGui::BeginChild("AddBody", ImVec2(0, 0), false);
-                beginSection("New combatant");
-                const float fieldW = 140 * S;
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 60 * S);
-                ImGui::InputText("Name", newName, sizeof(newName));
-                ImGui::RadioButton("Player", &newSide, 0);
-                ImGui::SameLine();
-                ImGui::RadioButton("Creature", &newSide, 1);
-                ImGui::SetNextItemWidth(fieldW);
-                ImGui::InputInt("Max HP", &newMaxHp);
-                newMaxHp = std::max(1, newMaxHp);
-                ImGui::SetNextItemWidth(fieldW);
-                ImGui::InputInt("AC", &newAc);
-                newAc = std::clamp(newAc, 0, 40);
-                if (newSide == 0) {
-                    ImGui::SetNextItemWidth(fieldW);
-                    ImGui::InputInt("Level", &newLevel);
-                    newLevel = std::clamp(newLevel, 1, 20);
-                } else {
-                    ImGui::SetNextItemWidth(fieldW);
-                    crCombo("CR", &newCr);
-                }
-                ImGui::SetNextItemWidth(fieldW);
-                ImGui::InputInt("How many", &newCount);
-                newCount = std::clamp(newCount, 1, 20);
-                const float w2 = rowButtonWidth(2);
-                const bool canAdd = newName[0] != '\0';
-                if (primaryButton("Add", ImVec2(w2, 0), canAdd)) {
-                    pushUndo();
-                    const Side side = newSide == 0 ? Side::Players : Side::Creatures;
-                    clearSelection();
-                    const std::vector<std::string> names = makeNumberedNames(encounter, newName, newCount);
-                    for (size_t i = 0; i < names.size(); i++) {
-                        Creature c(names[i], newMaxHp);
-                        c.setAc(newAc);
-                        if (side == Side::Players) c.setLevel(newLevel);
-                        else c.setCrIndex(newCr);
-                        const CardRef r = addCombatant(encounter, board, side, c, spawnPos());
-                        board.get(r).selected = true;
-                        board.get(r).spawnT = -0.06f * static_cast<float>(i);  // staggered fade-in
-                    }
-                    addLog("Added " + std::to_string(newCount) + " x " + newName, COL_MUTED);
-                    newName[0] = '\0';
-                }
-                ImGui::SameLine(0, 10 * S);
-                if (quietButton("Save to library", ImVec2(w2, 0), canAdd && newSide == 1)) {
-                    MonsterTemplate t;
-                    t.name = newName;
-                    t.maxHp = newMaxHp;
-                    t.ac = newAc;
-                    t.cr = newCr;
-                    library.push_back(t);
-                    saveLibrary();
-                    statusMsg = std::string("Saved ") + newName + " to the library.";
-                }
-                endSection();
-
                 beginSection("Monster library", std::to_string(library.size()));
                 ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 100 * S);
                 ImGui::InputTextWithHint("##filter", "Search...", libraryFilter, sizeof(libraryFilter));
@@ -2635,7 +2662,7 @@ int main(int, char**) {
                     saveLibrary();
                 }
                 ImGui::PushTextWrapPos(0);
-                ImGui::TextDisabled("Right-click a card > Save to library to add your own monsters.");
+                ImGui::TextDisabled("Right-click the board to add a new character, or a card > Save to library.");
                 ImGui::PopTextWrapPos();
                 if (quietButton("Restore default library", ImVec2(rowButtonWidth(1), 0))) {
                     library = defaultLibrary();
@@ -2706,17 +2733,170 @@ int main(int, char**) {
         ImGui::PopStyleVar(2);
         const ImVec2 boardOrigin = ImGui::GetCursorScreenPos();
         const ImVec2 boardSize = ImGui::GetContentRegionAvail();
-        lastBoardSize = boardSize;
-        drawBoardBackground(boardOrigin, boardSize);
-
-        const ImVec2 cardSize = tokenSize();
-        const float tabH = TAB_H * cardS();
+        const float dtB = std::min(io.DeltaTime, 0.05f);
         const ImVec2 mouse = ImGui::GetIO().MousePos;
         const bool shiftLike = io.KeyShift || io.KeyCtrl || io.KeySuper;
+        const bool mouseOnBoard = !anyPopup && ImGui::IsWindowHovered() &&
+                                  mouse.x >= boardOrigin.x && mouse.x <= boardOrigin.x + boardSize.x &&
+                                  mouse.y >= boardOrigin.y && mouse.y <= boardOrigin.y + boardSize.y;
+
+        // ---- Columns: Turn order (left) and Defeated (right), in board coordinates.
+        const float colMargin = 16 * S, colGap = 14 * S, colHeader = 44 * S, colPad = 10 * S;
+        const float trashSize = 84 * S;
+        const float turnColW = std::max(220 * S, std::floor((boardSize.x - 2 * colMargin - colGap) * 0.62f));
+        const float defColW = std::max(150 * S, boardSize.x - 2 * colMargin - colGap - turnColW);
+        const ImVec2 colMin[2] = {ImVec2(colMargin, colMargin),
+                                  ImVec2(colMargin + turnColW + colGap, colMargin)};
+        const ImVec2 colMax[2] = {ImVec2(colMargin + turnColW, boardSize.y - colMargin),
+                                  ImVec2(colMargin + turnColW + colGap + defColW,
+                                         std::max(colMargin + colHeader + 60 * S, boardSize.y - colMargin - trashSize - 18 * S))};
+        // Area the cards live in (screen coordinates); a little extra on top for the turn ribbon.
+        ImVec2 areaMin[2], areaMax[2];
+        for (int col = 0; col < 2; col++) {
+            areaMin[col] = boardOrigin + ImVec2(colMin[col].x + colPad, colMin[col].y + colHeader);
+            areaMax[col] = boardOrigin + ImVec2(colMax[col].x - colPad, colMax[col].y - colPad);
+        }
+        const float cardH = cardHeight();
+        const float slotH = cardH + 14 * S;
+
+        // Trash drop zone (bottom-right). Releasing a dragged card over it deletes it.
+        const ImVec2 trashMin(boardOrigin.x + boardSize.x - trashSize - 24 * S,
+                              boardOrigin.y + boardSize.y - trashSize - 24 * S);
+
+        auto overTrash = [&](CardRef r) {
+            const float m = 18 * S;
+            const bool mouseIn = mouse.x >= trashMin.x - m && mouse.x <= trashMin.x + trashSize + m &&
+                                 mouse.y >= trashMin.y - m && mouse.y <= trashMin.y + trashSize + m;
+            const CardState& st = board.get(r);
+            const ImVec2 center(boardOrigin.x + st.pos.x + st.size.x * 0.5f, boardOrigin.y + st.pos.y + st.size.y * 0.5f);
+            const bool centerIn = center.x >= trashMin.x && center.x <= trashMin.x + trashSize &&
+                                  center.y >= trashMin.y && center.y <= trashMin.y + trashSize;
+            return mouseIn || centerIn;
+        };
+
+        // Releasing a dragged card: over the trash it is deleted; in the Turn order it is
+        // dropped into the gap (reordering the turn order). This runs before the layout
+        // so everything below sees the updated order.
+        if (board.dragValid && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+            if (overTrash(board.drag)) {
+                const bool group = board.get(board.drag).selected;
+                const std::vector<CardRef> victims = group ? selectedRefs() : std::vector<CardRef>{board.drag};
+                pushUndoState(pressSnapshot);
+                deleteRefs(victims, true);
+            } else if (board.get(board.drag).column == 0 && dragSlot >= 0) {
+                placeInTurnOrder(board.drag, dragSlot);
+                if (snapshot() != pressSnapshot) pushUndoState(pressSnapshot);
+            }
+            board.dragValid = false;
+        }
+
+        ensureTurn();
+        std::vector<CardRef> colList[2];
+        for (const CardRef& r : board.z) {
+            CardState& st = board.get(r);
+            // A dead card drops to Defeated once its death animation has played a moment.
+            st.column = (st.wasDead && st.deathT >= 0.7f) ? 1 : 0;
+            colList[st.column].push_back(r);
+        }
+        const bool dragging = board.dragValid;
+        const CardRef dragRef = board.drag;
+
+        // Scrolling: the wheel scrolls the column under the mouse (eased).
+        if (mouseOnBoard && io.MouseWheel != 0.0f) {
+            for (int col = 0; col < 2; col++) {
+                const ImVec2 a = boardOrigin + colMin[col], b = boardOrigin + colMax[col];
+                if (mouse.x >= a.x && mouse.x <= b.x && mouse.y >= a.y && mouse.y <= b.y) {
+                    board.scrollTarget[col] -= io.MouseWheel * 5.0f * ImGui::GetFontSize();
+                }
+            }
+        }
+        float contentH[2], viewH[2];
+        for (int col = 0; col < 2; col++) {
+            contentH[col] = static_cast<float>(colList[col].size()) * slotH + 8 * S;
+            viewH[col] = areaMax[col].y - areaMin[col].y;
+        }
+        // Bring the card that holds the turn into view after the turn changed.
+        if (scrollToTurn) {
+            scrollToTurn = false;
+            int i = 0;
+            for (const CardRef& r : colList[0]) {
+                if (board.turnValid && r == board.turn) {
+                    const float top = static_cast<float>(i) * slotH;
+                    if (top < board.scrollTarget[0]) board.scrollTarget[0] = top - 6 * S;
+                    else if (top + cardH > board.scrollTarget[0] + viewH[0]) board.scrollTarget[0] = top + cardH - viewH[0] + 8 * S;
+                }
+                i++;
+            }
+        }
+        for (int col = 0; col < 2; col++) {
+            const float maxScroll = std::max(0.0f, contentH[col] - viewH[col]);
+            board.scrollTarget[col] = std::clamp(board.scrollTarget[col], 0.0f, maxScroll);
+            board.scroll[col] = approach(board.scroll[col], board.scrollTarget[col], 18.0f, dtB);
+            if (std::fabs(board.scroll[col] - board.scrollTarget[col]) < 0.3f) board.scroll[col] = board.scrollTarget[col];
+            board.scroll[col] = std::clamp(board.scroll[col], 0.0f, maxScroll);
+        }
+
+        // Where a card being dragged would land in the Turn order (a gap opens there).
+        int gapSlot = -1;
+        if (dragging && board.get(dragRef).column == 0) {
+            const float topY = boardOrigin.y + board.get(dragRef).pos.y;
+            const float listTop = areaMin[0].y - board.scroll[0];
+            const int others = static_cast<int>(colList[0].size()) - 1;
+            gapSlot = std::clamp(static_cast<int>(std::lround((topY - listTop) / slotH)), 0, std::max(0, others));
+        }
+        dragSlot = gapSlot;
+
+        // Targets for every card; cards glide there (the dragged one follows the mouse).
+        for (int col = 0; col < 2; col++) {
+            const float cardW = std::max(150 * S, (areaMax[col].x - areaMin[col].x) - 14 * S);
+            int slot = 0;
+            for (const CardRef& r : colList[col]) {
+                CardState& st = board.get(r);
+                st.size = ImVec2(cardW, cardH);
+                const bool isDragged = dragging && r == dragRef;
+                if (!isDragged && col == 0 && gapSlot >= 0 && slot == gapSlot) slot++;  // leave the gap open
+                const bool holdsTurn = col == 0 && board.turnValid && r == board.turn;
+                const float stepForward = holdsTurn ? 10.0f * S * easeOutCubic(st.turnAnim) : 0.0f;
+                st.target = ImVec2(colMin[col].x + colPad + 2 * S + stepForward,
+                                   colMin[col].y + colHeader + static_cast<float>(slot) * slotH - board.scroll[col]);
+                if (!isDragged) slot++;
+                if (!st.placed) {
+                    st.pos = st.target;
+                    st.placed = true;
+                } else if (!isDragged) {
+                    st.pos.x = approach(st.pos.x, st.target.x, 16.0f, dtB);
+                    st.pos.y = approach(st.pos.y, st.target.y, 16.0f, dtB);
+                    if (std::fabs(st.pos.x - st.target.x) < 0.4f) st.pos.x = st.target.x;
+                    if (std::fabs(st.pos.y - st.target.y) < 0.4f) st.pos.y = st.target.y;
+                }
+                // Clipped to its column, except while it is dragged or crossing to the other one.
+                const bool crossing = std::fabs(st.pos.x - st.target.x) > 6 * S;
+                if (isDragged || crossing) {
+                    st.clipMin = boardOrigin;
+                    st.clipMax = boardOrigin + boardSize;
+                } else {
+                    st.clipMin = ImVec2(areaMin[col].x - 4 * S, areaMin[col].y - 14 * S);
+                    st.clipMax = ImVec2(areaMax[col].x + 10 * S, areaMax[col].y + 4 * S);
+                }
+            }
+        }
+
+        // The screen rect of a card, and whether a point is on its visible part.
         auto cardRectContains = [&](CardRef r, ImVec2 pt) {
-            const ImVec2 cp = board.get(r).pos;
-            const float x0 = boardOrigin.x + cp.x, y0 = boardOrigin.y + cp.y - tabH;
-            return pt.x >= x0 && pt.x <= x0 + cardSize.x && pt.y >= y0 && pt.y <= y0 + cardSize.y + tabH;
+            const CardState& st = board.get(r);
+            const ImVec2 a = boardOrigin + st.pos;
+            const ImVec2 b = a + st.size;
+            return pt.x >= std::max(a.x, st.clipMin.x) && pt.x <= std::min(b.x, st.clipMax.x) &&
+                   pt.y >= std::max(a.y, st.clipMin.y) && pt.y <= std::min(b.y, st.clipMax.y);
+        };
+        // The TURN ribbon sticks out above its card: clicks there belong to the ribbon.
+        auto overRibbon = [&](ImVec2 pt) {
+            for (const CardRef& r : board.z) {
+                const CardState& st = board.get(r);
+                if (st.column != 0 || st.turnAnim < 0.5f) continue;
+                if (std::fabs(pt.x - st.turnCenter.x) <= 48 * S && std::fabs(pt.y - st.turnCenter.y) <= 12 * S) return true;
+            }
+            return false;
         };
         auto topCardAt = [&](ImVec2 pt) {
             for (int k = static_cast<int>(board.z.size()) - 1; k >= 0; k--) {
@@ -2724,24 +2904,51 @@ int main(int, char**) {
             }
             return -1;
         };
-        const bool mouseOnBoard = !anyPopup && ImGui::IsWindowHovered() &&
-                                  mouse.x >= boardOrigin.x && mouse.x <= boardOrigin.x + boardSize.x &&
-                                  mouse.y >= boardOrigin.y && mouse.y <= boardOrigin.y + boardSize.y;
-
-        // Trash drop zone (bottom-right). Releasing a dragged card over it deletes it.
-        const float trashSize = 84 * S;
-        const ImVec2 trashMin(boardOrigin.x + boardSize.x - trashSize - 24 * S,
-                              boardOrigin.y + boardSize.y - trashSize - 24 * S);
-        auto overTrash = [&](CardRef r) {
-            const float m = 18 * S;
-            const bool mouseIn = mouse.x >= trashMin.x - m && mouse.x <= trashMin.x + trashSize + m &&
-                                 mouse.y >= trashMin.y - m && mouse.y <= trashMin.y + trashSize + m;
-            const ImVec2 cp = board.get(r).pos;
-            const ImVec2 center(boardOrigin.x + cp.x + cardSize.x * 0.5f, boardOrigin.y + cp.y + cardSize.y * 0.5f);
-            const bool centerIn = center.x >= trashMin.x && center.x <= trashMin.x + trashSize &&
-                                  center.y >= trashMin.y && center.y <= trashMin.y + trashSize;
-            return mouseIn || centerIn;
-        };
+        // ---- Column panels (behind the cards).
+        {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const char* titles[2] = {"Turn order", "Defeated"};
+            for (int col = 0; col < 2; col++) {
+                const ImVec2 a = boardOrigin + colMin[col], b = boardOrigin + colMax[col];
+                inkBox(dl, a, b, 18 * S, S, IM_COL32(241, 241, 237, 255), 3.0f);
+                const ImU32 titleCol = col == 0 ? COL_TEXT : COL_MUTED;
+                const ImVec2 ts = heavyTextSize(titles[col], 1.0f);
+                heavyText(dl, ImVec2(a.x + 16 * S, a.y + 12 * S), titleCol, titles[col], 1.0f);
+                const std::string count = std::to_string(colList[col].size());
+                dl->AddText(ImVec2(a.x + 16 * S + ts.x + 8 * S, a.y + 12 * S + (ts.y - ImGui::GetTextLineHeight()) * 0.5f),
+                            COL_MUTED, count.c_str());
+                if (col == 0) {
+                    const std::string roundText = "Round " + std::to_string(board.round);
+                    const ImVec2 rs = boldTextSize(roundText.c_str(), 0.95f);
+                    boldText(dl, ImVec2(b.x - 16 * S - rs.x, a.y + 12 * S + (ts.y - rs.y) * 0.5f), COL_MUTED,
+                             roundText.c_str(), 0.95f);
+                }
+                if (colList[col].empty()) {
+                    const char* hint = col == 0 ? "Right-click to add a character" : "Defeated creatures fall here";
+                    const ImVec2 hs = ImGui::CalcTextSize(hint);
+                    dl->AddText(ImVec2((a.x + b.x - hs.x) * 0.5f, a.y + colHeader + 30 * S), COL_MUTED, hint);
+                }
+                // A slim scroll indicator when the column overflows.
+                if (contentH[col] > viewH[col] + 1.0f) {
+                    const float trackH = viewH[col];
+                    const float thumbH = std::max(24 * S, trackH * viewH[col] / contentH[col]);
+                    const float maxScroll = contentH[col] - viewH[col];
+                    const float y0 = areaMin[col].y + (trackH - thumbH) * (board.scroll[col] / maxScroll);
+                    const float x1 = b.x - 5 * S;
+                    dl->AddRectFilled(ImVec2(x1 - 4 * S, y0), ImVec2(x1, y0 + thumbH), COL_BORDER_HI, 2 * S);
+                }
+            }
+            // The gap a dragged card would drop into.
+            if (gapSlot >= 0) {
+                const float gy = boardOrigin.y + colMin[0].y + colHeader + static_cast<float>(gapSlot) * slotH - board.scroll[0];
+                const ImVec2 a(boardOrigin.x + colMin[0].x + colPad + 2 * S, gy);
+                const ImVec2 b(a.x + board.get(dragRef).size.x, gy + cardH);
+                dl->PushClipRect(ImVec2(areaMin[0].x - 4 * S, areaMin[0].y), ImVec2(areaMax[0].x + 10 * S, areaMax[0].y), true);
+                dl->AddRectFilled(a, b, withAlpha(COL_INK, 14), 14 * S);
+                dl->AddRect(a, b, withAlpha(COL_INK, 70), 14 * S, 0, 1.5f * S);
+                dl->PopClipRect();
+            }
+        }
 
         // Alerts: clicking one fades it away. While the mouse is over one, the
         // cards and the board underneath ignore it (rects are from last frame).
@@ -2762,20 +2969,15 @@ int main(int, char**) {
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) hotToast->clicked = ImGui::GetTime();
         }
 
-        // Press: remember the state (for undo), raise the card, or start a selection box.
+        // Press: remember the state (for undo), or start a selection box on empty space.
         if (mouseOnBoard && !mouseOverToast && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             pressSnapshot = snapshot();
-            const int k = topCardAt(mouse);
-            if (k >= 0) {
-                const CardRef hit = board.z[k];
-                board.z.erase(board.z.begin() + k);
-                board.z.push_back(hit);
-            } else {
+            if (topCardAt(mouse) < 0 && !overRibbon(mouse)) {
                 marqueeActive = true;
                 marqueeStart = mouse;
             }
         }
-        // Right-click: context menu for the card under the mouse.
+        // Right-click: the card's menu, or the board menu (New character...) on empty space.
         if (mouseOnBoard && !mouseOverToast && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
             const int k = topCardAt(mouse);
             if (k >= 0) {
@@ -2785,21 +2987,19 @@ int main(int, char**) {
                     board.get(menuRef).selected = true;
                 }
                 openMenu = true;
-            }
-        }
-
-        // Dragging a selected card moves the whole selection with it.
-        const bool dragIsGroup = board.dragValid && board.get(board.drag).selected;
-        if (dragIsGroup && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-            for (const CardRef& r : selectedRefs()) {
-                if (!(r == board.drag)) board.get(r).pos = board.get(r).pos + io.MouseDelta;
-            }
-        }
-        if (board.dragValid && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-            pushUndoState(pressSnapshot);  // a move or a delete: undo goes back to before the press
-            if (overTrash(board.drag)) {
-                const std::vector<CardRef> victims = dragIsGroup ? selectedRefs() : std::vector<CardRef>{board.drag};
-                deleteRefs(victims, true);
+            } else if (!overRibbon(mouse)) {
+                // Insert at the slot under the cursor when it is over the Turn order column.
+                boardMenuSlot = -1;
+                const ImVec2 a = boardOrigin + colMin[0], b = boardOrigin + colMax[0];
+                if (mouse.x >= a.x && mouse.x <= b.x && mouse.y >= a.y && mouse.y <= b.y) {
+                    int above = 0;
+                    for (const CardRef& r : colList[0]) {
+                        const CardState& st = board.get(r);
+                        if (boardOrigin.y + st.target.y + cardH * 0.5f < mouse.y) above++;
+                    }
+                    boardMenuSlot = above;
+                }
+                openBoardMenu = true;
             }
         }
 
@@ -2821,25 +3021,42 @@ int main(int, char**) {
             if (s >= 3) addLog(c->getName() + " is stable", COL_GREEN);
             if (f >= 3) addAlert(c->getName() + " has died", COL_RED);
         };
+        actions.nextTurn = [&]() { nextTurn(); };
 
-        // Stacking order: the card on top of the stack wins the mouse. Cards are
-        // drawn back to front, but ImGui gives overlapping presses to whichever
-        // item is submitted first, so a card is made non-interactive whenever a
-        // card in front of it also covers the mouse position.
-        for (size_t k = 0; k < board.z.size(); k++) {
-            bool covered = false;
-            for (size_t j = k + 1; j < board.z.size() && !covered; j++) {
-                covered = cardRectContains(board.z[j], mouse);
+        // Draw order: Turn order cards, Defeated cards, then the dragged card on top.
+        std::vector<CardRef> drawOrder;
+        for (int col = 0; col < 2; col++) {
+            for (const CardRef& r : colList[col]) {
+                if (!(dragging && r == dragRef)) drawOrder.push_back(r);
             }
-            const CardRef r = board.z[k];
-            drawToken(encounter, r, board.get(r), boardOrigin, boardSize, amountLabel,
-                      !covered && !marqueeActive && !mouseOverToast, actions);
+        }
+        if (dragging) drawOrder.push_back(dragRef);
+        // Overlapping cards (a dragged one, or ones mid-glide): the card drawn last wins
+        // the mouse, because ImGui gives overlapping presses to whichever item is
+        // submitted first, so a card is made non-interactive whenever one in front of it
+        // also covers the mouse position.
+        for (size_t k = 0; k < drawOrder.size(); k++) {
+            bool covered = false;
+            for (size_t j = k + 1; j < drawOrder.size() && !covered; j++) {
+                covered = cardRectContains(drawOrder[j], mouse);
+            }
+            const CardRef r = drawOrder[k];
+            CardState& st = board.get(r);
+            const bool isDraggedCard = dragging && r == dragRef;
+            const bool holdsTurn = st.column == 0 && board.turnValid && r == board.turn;
+            if (!isDraggedCard) ImGui::PushClipRect(st.clipMin, st.clipMax, true);
+            drawToken(encounter, r, st, boardOrigin, amountLabel,
+                      !covered && !marqueeActive && !mouseOverToast, holdsTurn, actions);
+            if (!isDraggedCard) ImGui::PopClipRect();
         }
         // Effects (floating numbers, crit bursts) always sit above every card.
         {
             CardFontScope cardFont;
-            for (const CardRef& r : board.z) {
-                drawCardEffects(board.get(r), cardSize, cardS());
+            for (const CardRef& r : drawOrder) {
+                const CardState& st = board.get(r);
+                const ImVec2 a = boardOrigin + st.pos;
+                const bool visible = a.y + st.size.y > st.clipMin.y && a.y < st.clipMax.y;
+                if (visible) drawCardEffects(st, st.size, cardS());
             }
         }
 
@@ -2868,7 +3085,7 @@ int main(int, char**) {
             }
         }
 
-        // Selection box on the empty board.
+        // Selection box on empty space.
         if (marqueeActive) {
             ImDrawList* dl = ImGui::GetWindowDrawList();
             const ImVec2 a(std::min(marqueeStart.x, mouse.x), std::min(marqueeStart.y, mouse.y));
@@ -2881,9 +3098,13 @@ int main(int, char**) {
                 if (!shiftLike) clearSelection();
                 if (!tiny) {
                     for (const CardRef& r : board.z) {
-                        const ImVec2 cp = boardOrigin + board.get(r).pos;
-                        const bool overlaps = cp.x < b.x && cp.x + cardSize.x > a.x &&
-                                              cp.y - tabH < b.y && cp.y + cardSize.y > a.y;
+                        const CardState& st = board.get(r);
+                        const ImVec2 cp = boardOrigin + st.pos;
+                        // Only the part of the card that is visible in its column counts.
+                        const ImVec2 lo(std::max(cp.x, st.clipMin.x), std::max(cp.y, st.clipMin.y));
+                        const ImVec2 hi(std::min(cp.x + st.size.x, st.clipMax.x), std::min(cp.y + st.size.y, st.clipMax.y));
+                        const bool overlaps = lo.x < hi.x && lo.y < hi.y && lo.x < b.x && hi.x > a.x &&
+                                              lo.y < b.y && hi.y > a.y;
                         if (overlaps) board.get(r).selected = true;
                     }
                 }
@@ -2926,6 +3147,7 @@ int main(int, char**) {
                 const bool many = sel.size() > 1;
                 ImGui::TextDisabled("%s", many ? (std::to_string(sel.size()) + " selected").c_str() : c->getName().c_str());
                 ImGui::Separator();
+                if (!many && ImGui::MenuItem("Start turn here")) startTurnAt(menuRef);
                 if (!many && ImGui::MenuItem("Edit...")) {
                     editRef = menuRef;
                     editCopy = *c;
@@ -2981,6 +3203,120 @@ int main(int, char**) {
                 ImGui::Separator();
                 if (ImGui::MenuItem(many ? "Delete selected" : "Delete", "Del")) deleteRefs(sel, false);
             }
+            ImGui::EndPopup();
+        }
+
+        // Board menu (right-click on empty space): New character, Add from library.
+        if (openBoardMenu) {
+            ImGui::OpenPopup("BoardMenu");
+            openBoardMenu = false;
+        }
+        if (ImGui::BeginPopup("BoardMenu")) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+            if (ImGui::MenuItem("New character...")) {
+                openNewChar = true;
+                newCharFocus = true;
+                newCharSlot = boardMenuSlot;
+                newName[0] = '\0';
+            }
+            if (ImGui::BeginMenu("Add from library")) {
+                for (int i = 0; i < static_cast<int>(library.size()); i++) {
+                    const MonsterTemplate t = library[i];
+                    const std::string info = std::to_string(t.maxHp) + " HP  AC " + std::to_string(t.ac);
+                    if (ImGui::MenuItem((t.name + "##lib" + std::to_string(i)).c_str(), info.c_str())) {
+                        const std::vector<CardRef> added = addFromTemplate(t, Side::Creatures, 1);
+                        if (boardMenuSlot >= 0) {
+                            for (size_t k = 0; k < added.size(); k++) placeInTurnOrder(added[k], boardMenuSlot + static_cast<int>(k));
+                        }
+                    }
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::EndPopup();
+        }
+
+        // New character (from the board menu): the same fields the sidebar form used to have.
+        if (openNewChar) {
+            ImGui::OpenPopup("New character");
+            openNewChar = false;
+        }
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 16 * S);
+        const bool newCharOpen = ImGui::BeginPopupModal("New character", nullptr,
+                                                        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
+        ImGui::PopStyleVar(2);
+        if (newCharOpen) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+            const float fieldW = 150 * S;
+            if (newCharFocus) {
+                ImGui::SetKeyboardFocusHere();
+                newCharFocus = false;
+            }
+            ImGui::SetNextItemWidth(260 * S);
+            const bool enterPressed = ImGui::InputText("Name", newName, sizeof(newName), ImGuiInputTextFlags_EnterReturnsTrue);
+            ImGui::RadioButton("Player", &newSide, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Creature", &newSide, 1);
+            ImGui::SetNextItemWidth(fieldW);
+            ImGui::InputInt("Max HP", &newMaxHp);
+            newMaxHp = std::max(1, newMaxHp);
+            ImGui::SetNextItemWidth(fieldW);
+            ImGui::InputInt("AC", &newAc);
+            newAc = std::clamp(newAc, 0, 40);
+            if (newSide == 0) {
+                ImGui::SetNextItemWidth(fieldW);
+                ImGui::InputInt("Level", &newLevel);
+                newLevel = std::clamp(newLevel, 1, 20);
+            } else {
+                ImGui::SetNextItemWidth(fieldW);
+                crCombo("CR", &newCr);
+                ImGui::Checkbox("Also save to the monster library", &newSaveLib);
+            }
+            ImGui::SetNextItemWidth(fieldW);
+            ImGui::InputInt("How many", &newCount);
+            newCount = std::clamp(newCount, 1, 20);
+            ImGui::Dummy(ImVec2(0, 4 * S));
+            const bool canCreate = newName[0] != '\0';
+            const float bw = 120 * S;
+            bool create = primaryButton("Create", ImVec2(bw, 0), canCreate);
+            ImGui::SameLine(0, 12 * S);
+            const bool cancel = quietButton("Cancel", ImVec2(bw, 0));
+            if (enterPressed && canCreate) create = true;
+            if (create) {
+                pushUndo();
+                const Side side = newSide == 0 ? Side::Players : Side::Creatures;
+                clearSelection();
+                const std::vector<std::string> names = makeNumberedNames(encounter, newName, newCount);
+                std::vector<CardRef> added;
+                for (size_t i = 0; i < names.size(); i++) {
+                    Creature c(names[i], newMaxHp);
+                    c.setAc(newAc);
+                    if (side == Side::Players) c.setLevel(newLevel);
+                    else c.setCrIndex(newCr);
+                    const CardRef r = addCombatant(encounter, board, side, c, spawnPos());
+                    board.get(r).selected = true;
+                    board.get(r).spawnT = -0.06f * static_cast<float>(i);  // staggered fade-in
+                    added.push_back(r);
+                }
+                addLog("Added " + std::to_string(newCount) + " x " + newName, COL_MUTED);
+                if (side == Side::Creatures && newSaveLib) {
+                    MonsterTemplate t;
+                    t.name = newName;
+                    t.maxHp = newMaxHp;
+                    t.ac = newAc;
+                    t.cr = newCr;
+                    library.push_back(t);
+                    saveLibrary();
+                    statusMsg = std::string("Saved ") + newName + " to the library.";
+                }
+                if (newCharSlot >= 0) {
+                    for (size_t i = 0; i < added.size(); i++) placeInTurnOrder(added[i], newCharSlot + static_cast<int>(i));
+                }
+                newName[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            }
+            if (cancel) ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
 

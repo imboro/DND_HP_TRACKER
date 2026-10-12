@@ -12,7 +12,21 @@ def rep(old, new):
 
 rep('#include "creature.h"\n', '#include "creature.h"\n#include <map>\n'
     'static std::map<std::string, ImRect> g_rects;\nstatic std::string g_shot;\nstatic int g_forceTab = -1;\n'
-    'static float g_scrollCombat = -1;\nstatic std::string g_scrollTo;\nstatic ImVec2 g_boardOrigin;\nstatic ImVec2 g_boardSize;\nstatic float g_lineH = 0;\n')
+    'static float g_scrollCombat = -1;\nstatic std::string g_scrollTo;\nstatic ImVec2 g_boardOrigin;\nstatic ImVec2 g_boardSize;\nstatic float g_lineH = 0;\n'
+    '// Simulated input is tagged with this mouse id; the real mouse is ignored, so moving\n'
+    '// it over (or away from) the test window cannot disturb the run.\n'
+    'static const Uint32 TEST_MOUSE_ID = 4242;\nstatic ImVec2 g_testMouse(-1, -1);\n')
+# Drop real mouse events and window enter/leave; keep only the simulated ones.
+rep('            ImGui_ImplSDL2_ProcessEvent(&event);',
+    '            if ((event.type == SDL_MOUSEMOTION && event.motion.which != TEST_MOUSE_ID) ||\n'
+    '                ((event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) && event.button.which != TEST_MOUSE_ID) ||\n'
+    '                event.type == SDL_MOUSEWHEEL ||\n'
+    '                (event.type == SDL_WINDOWEVENT && (event.window.event == SDL_WINDOWEVENT_ENTER || event.window.event == SDL_WINDOWEVENT_LEAVE))) continue;\n'
+    '            ImGui_ImplSDL2_ProcessEvent(&event);')
+# The SDL backend falls back to the real global cursor when the window has focus but is not
+# hovered; re-assert the simulated position after it.
+rep('        ImGui_ImplSDL2_NewFrame();',
+    '        ImGui_ImplSDL2_NewFrame();\n        if (g_testMouse.x >= 0) ImGui::GetIO().AddMousePosEvent(g_testMouse.x, g_testMouse.y);')
 rep('    const bool pressed = ImGui::Button(label, drawSize);\n',
     '    const bool pressed = ImGui::Button(label, drawSize);\n    g_rects[label] = ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());\n    if (!g_scrollTo.empty() && g_scrollTo == label) ImGui::SetScrollHereY(0.5f);\n')
 rep('segmentedTabs(TAB_LABELS, 3, &activeTab, S);',
