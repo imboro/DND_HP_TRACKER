@@ -16,8 +16,11 @@ add_executable(logic_tests logic_tests.cpp ${LOGIC_SOURCES})
 
 # ImGui GUI
 set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/third_party/imgui)
+find_package(Threads REQUIRED)
 add_executable(hp_tracker_gui
     gui_main.cpp
+    player_server.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/qrcodegen/qrcodegen.cpp
     ${LOGIC_SOURCES}
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
@@ -26,10 +29,15 @@ add_executable(hp_tracker_gui
     ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
     ${IMGUI_DIR}/backends/imgui_impl_sdlrenderer2.cpp
 )
-target_include_directories(hp_tracker_gui PRIVATE ${IMGUI_DIR} ${IMGUI_DIR}/backends)
+target_include_directories(hp_tracker_gui PRIVATE ${IMGUI_DIR} ${IMGUI_DIR}/backends
+    ${CMAKE_SOURCE_DIR}/third_party/httplib ${CMAKE_SOURCE_DIR}/third_party/qrcodegen)
+# Player screens: a small web server (cpp-httplib) on a background thread.
+target_link_libraries(hp_tracker_gui PRIVATE Threads::Threads)
 if(WIN32)
     # SDL2main provides WinMain; WIN32_EXECUTABLE means no console window.
-    target_link_libraries(hp_tracker_gui PRIVATE SDL2::SDL2main SDL2::SDL2)
+    target_link_libraries(hp_tracker_gui PRIVATE SDL2::SDL2main SDL2::SDL2 ws2_32)
+    # cpp-httplib needs the Windows 10 API.
+    target_compile_definitions(hp_tracker_gui PRIVATE _WIN32_WINNT=0x0A00)
     set_target_properties(hp_tracker_gui PROPERTIES WIN32_EXECUTABLE TRUE OUTPUT_NAME "DnD HP Tracker")
     # The app icon (windows/icon/hptracker.ico) is compiled in as a resource.
     enable_language(RC)

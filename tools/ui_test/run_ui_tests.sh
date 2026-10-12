@@ -19,11 +19,14 @@ rm -f "$OUT"/gui_test "$OUT"/test_save.txt "$OUT"/test_library.txt "$OUT"/test_s
 python3 "$HERE/make_harness.py" gui_main.cpp "$HERE/test_body.inc" "$OUT/gui_test.cpp" "$OUT"
 
 I=third_party/imgui
-g++ -std=c++17 -O1 -I$I -I$I/backends -I. $(sdl2-config --cflags) "$OUT/gui_test.cpp" \
-    creature.cpp encounter.cpp difficulty.cpp \
+g++ -std=c++17 -O1 -I$I -I$I/backends -I. -Ithird_party/httplib -Ithird_party/qrcodegen $(sdl2-config --cflags) "$OUT/gui_test.cpp" \
+    creature.cpp encounter.cpp difficulty.cpp player_server.cpp third_party/qrcodegen/qrcodegen.cpp \
     $I/imgui.cpp $I/imgui_draw.cpp $I/imgui_tables.cpp $I/imgui_widgets.cpp \
     $I/backends/imgui_impl_sdl2.cpp $I/backends/imgui_impl_sdlrenderer2.cpp \
     $(sdl2-config --libs) -o "$OUT/gui_test" 2> "$OUT/build.log" || { grep -E "error" "$OUT/build.log" | head -20; exit 1; }
+
+# WebKit snapshots of the player screen page (built once).
+[ -x "$OUT/phone_snapshot" ] || swiftc -O "$HERE/phone_snapshot.swift" -o "$OUT/phone_snapshot" 2>> "$OUT/build.log"
 
 "$OUT/gui_test"
 

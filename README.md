@@ -27,6 +27,7 @@ agreed on, and the tracker follows it.
 - [Adding creatures and the monster library](#adding-creatures-and-the-monster-library)
 - [Encounter summary and difficulty](#encounter-summary-and-difficulty)
 - [Alerts and the combat log](#alerts-and-the-combat-log)
+- [Player screens (phones)](#player-screens-phones)
 - [The turn order](#the-turn-order)
 - [Undo, saving and starting over](#undo-saving-and-starting-over)
 - [Keyboard and mouse reference](#keyboard-and-mouse-reference)
@@ -389,6 +390,33 @@ The board has two columns:
 
 ---
 
+## Player screens (phones)
+
+The players can follow the fight on their phones, live: their own character big
+(HP, temp HP, AC, speed, passive Perception, conditions, death saves) with the same
+animations as on the board (the bar drains, the damage number floats up, the card
+shakes on a big hit), the turn order, the round, and an **"It's your turn!"** banner
+(with a vibration on Android) when their turn comes.
+
+1. Press **Player screens (QR)** (Combat tab > Encounter, or in the setup panel) and
+   then **Start sharing**.
+2. The players scan the QR code with the phone camera and tap their character. The
+   phone remembers it. A link ending in `?me=Name` opens straight on that character.
+
+- The phones must be on the **same Wi-Fi** as the computer. Some public or university
+  networks block devices from seeing each other; a phone hotspot works around that.
+- It is **read-only**: phones can't change anything.
+- **Enemies** appear only by name in the turn order (no HP), and only once combat has
+  started, so the setup stays a surprise. Defeated enemies disappear. DM notes are
+  never sent.
+- Nothing leaves your network and nothing needs installing on the phones: the app
+  serves a small web page itself (port 8080, or the next free one). The first time,
+  macOS or Windows may ask whether to allow incoming connections; allow it for
+  private networks.
+- **Stop sharing** (in the same window) turns it off; it also stops when you quit.
+
+---
+
 ## Undo, saving and starting over
 
 - **Undo / Redo**: the buttons, or **Cmd+Z** / **Cmd+Shift+Z** (or Cmd+Y). This
@@ -498,7 +526,10 @@ writes screenshots to `build/ui_test/`.
 | `logic_tests.cpp` | Tests for the rules layer |
 | `main.cpp` | Console demo |
 | `package_mac.sh` | Builds the shareable app bundle and zip |
-| `tools/ui_test/` | Scripted end-to-end UI tests |
+| `player_server.h/.cpp` | Player screens: the local web server (on its own thread) and the network address for the QR |
+| `player_page.inc` | Player screens: the phone page (HTML, CSS and JavaScript) |
+| `third_party/` | Dear ImGui, cpp-httplib (web server) and qrcodegen (QR codes), all MIT-licensed |
+| `tools/ui_test/` | Scripted end-to-end UI tests (`phone_snapshot.swift` renders the phone page in WebKit) |
 | `windows/` | Windows build: script, compiler settings, and the read-me shipped in the zip |
 | `macos/icon/` | The Mac app icon (`hptracker.icns`), generated |
 | `hptracker_icon.png` | Source artwork for the app icons |

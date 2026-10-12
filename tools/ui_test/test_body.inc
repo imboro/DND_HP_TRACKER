@@ -338,6 +338,56 @@
                 act(3, [&]() { key(true, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
                 act(3, [&]() { key(false, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
 
+                // 18d) Player screens: the state the phones get, and the page itself (rendered with WebKit)
+                static auto httpGet = [](const std::string& url) {
+                    std::string out;
+                    if (FILE* f = popen(("curl -s --max-time 3 '" + url + "'").c_str(), "r")) {
+                        char buf[4096]; size_t n;
+                        while ((n = fread(buf, 1, sizeof(buf), f)) > 0) out.append(buf, n);
+                        pclose(f);
+                    }
+                    return out;
+                };
+                static auto localUrl = [&](const std::string& path) { return "http://127.0.0.1:" + std::to_string(playerServer.port()) + "/" + path; };
+                act(2, [&]() {
+                    Creature g("Ghoul", 22); g.setColor(4); g.setIcon(4);
+                    addCombatant(encounter, board, Side::Creatures, g, ImVec2(0, 0));
+                    C("Aria")->setHp(20);
+                    startSharing();
+                    check(playerServer.running() && playerServer.port() >= 8080, "player screens start on a local port (" + std::to_string(playerServer.port()) + ")");
+                    std::printf("  phone URL: %s\n", shareUrl.c_str());
+                    openShare = true;
+                });
+                act(25, [&]() { g_shot = "23_share_qr"; });
+                act(3, [&]() { key(true, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
+                act(3, [&]() { key(false, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
+                act(1, [&]() {
+                    const std::string page = httpGet(localUrl(""));
+                    const std::string state = httpGet(localUrl("state"));
+                    check(page.find("HP Tracker") != std::string::npos && page.find("</html>") != std::string::npos, "the phone page is served");
+                    check(state.find("\"name\":\"Aria\"") != std::string::npos && state.find("\"hp\":20") != std::string::npos && state.find("\"combat\":true") != std::string::npos,
+                          "the state has the players' HP and the combat");
+                    const size_t g = state.find("\"name\":\"Ghoul\"");
+                    const std::string ghoul = g == std::string::npos ? std::string() : state.substr(g, state.find('}', g) - g);
+                    check(!ghoul.empty() && ghoul.find("\"hp\"") == std::string::npos, "enemies are sent by name only (" + ghoul + ")");
+                    BoardState setup = board; setup.inCombat = false;
+                    check(playerStateJson(encounter, setup).find("Ghoul") == std::string::npos, "enemies stay hidden during setup");
+                });
+                // WebKit renders the page as a phone; the HP drops and the turn passes while it is open.
+                act(1, [&]() {
+                    const std::string cmd = "'" + g_outDir + "/phone_snapshot' '" + localUrl("?me=Aria") + "' '" + g_outDir + "/phone' 1.6 2.75 3.3 4.6 > /dev/null 2>&1 &";
+                    std::system(cmd.c_str());
+                });
+                waitSeconds(2.2);
+                act(1, [&]() { pushUndo(); applyHit(findRef("Aria"), 9); startTurnAt(findRef("Aria")); });
+                waitSeconds(3.2);
+                act(1, [&]() {
+                    std::ifstream last(g_outDir + "/phone_3.png");
+                    check(last.good() && playerServer.viewers() >= 1, "a phone (WebKit) follows the page (" + std::to_string(playerServer.viewers()) + " connected)");
+                    playerServer.stop();
+                    check(!playerServer.running(), "player screens stop");
+                });
+
                 // 19) Alerts fade out on their own
                 act(2, [&]() { addAlert("Fade test", COL_AMBER); });
                 waitSeconds(1.5);

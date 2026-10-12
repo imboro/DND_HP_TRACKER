@@ -15,7 +15,8 @@ rep('#include "creature.h"\n', '#include "creature.h"\n#include <map>\n'
     'static float g_scrollCombat = -1;\nstatic std::string g_scrollTo;\nstatic ImVec2 g_boardOrigin;\nstatic ImVec2 g_boardSize;\nstatic float g_lineH = 0;\n'
     '// Simulated input is tagged with this mouse id; the real mouse is ignored, so moving\n'
     '// it over (or away from) the test window cannot disturb the run.\n'
-    'static const Uint32 TEST_MOUSE_ID = 4242;\nstatic ImVec2 g_testMouse(-1, -1);\n')
+    'static const Uint32 TEST_MOUSE_ID = 4242;\nstatic ImVec2 g_testMouse(-1, -1);\n'
+    'static const std::string g_outDir = "%s";\n' % scratch)
 # Drop real mouse events and window enter/leave; keep only the simulated ones.
 rep('            ImGui_ImplSDL2_ProcessEvent(&event);',
     '            if ((event.type == SDL_MOUSEMOTION && event.motion.which != TEST_MOUSE_ID) ||\n'

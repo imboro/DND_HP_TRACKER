@@ -20,6 +20,8 @@
 #include "imgui_impl_sdlrenderer2.h"
 #include "creature.h"
 #include "difficulty.h"
+#include "player_server.h"
+#include "qrcodegen.hpp"
 #include "encounter.h"
 
 // Scales fonts, spacing and hard-coded sizes so the UI isn't tiny.
@@ -2369,6 +2371,78 @@ static void drawToasts(std::vector<Alert>& alerts, ImVec2 boardOrigin, ImVec2 bo
     }
 }
 
+// ---- Player screens: the public state the phones get --------------------------
+
+static std::string jsonString(const std::string& s) {
+    std::string out = "\"";
+    for (const unsigned char ch : s) {
+        switch (ch) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (ch < 0x20) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", ch);
+                    out += buf;
+                } else {
+                    out += static_cast<char>(ch);
+                }
+        }
+    }
+    return out + "\"";
+}
+
+static std::string jsonColor(ImU32 c) {
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "#%02x%02x%02x", static_cast<unsigned>(c & 0xFF),
+                  static_cast<unsigned>((c >> 8) & 0xFF), static_cast<unsigned>((c >> 16) & 0xFF));
+    return jsonString(buf);
+}
+
+// What the phones may see: the round, whose turn it is and the turn order. Players
+// come with their stats; enemies only with their name and look (no HP), and they
+// only appear once combat has started (setup stays a surprise) and until defeated.
+static std::string playerStateJson(const Encounter& encounter, const BoardState& board) {
+    std::ostringstream o;
+    o << "{\"combat\":" << (board.inCombat ? "true" : "false") << ",\"round\":" << board.round << ",\"turn\":";
+    const Creature* turn = board.inCombat && board.turnValid ? encounter.at(board.turn.side, board.turn.index) : nullptr;
+    o << (turn ? jsonString(turn->getName()) : std::string("null")) << ",\"order\":[";
+    bool firstItem = true;
+    for (const CardRef& r : board.z) {
+        const Creature* c = encounter.at(r.side, r.index);
+        if (c == nullptr) continue;
+        const Life life = lifeOf(r.side, *c);
+        const bool player = r.side == Side::Players;
+        if (!player && (!board.inCombat || life == Life::Dead)) continue;
+        if (!firstItem) o << ',';
+        firstItem = false;
+        o << "{\"name\":" << jsonString(c->getName()) << ",\"side\":\"" << (player ? "player" : "enemy") << "\""
+          << ",\"color\":" << jsonColor(creatureColor(r.side, *c)) << ",\"icon\":" << iconIndexFor(r.side, c->getIcon());
+        if (player) {
+            const char* lifeName = life == Life::Dead ? "dead" : life == Life::Dying ? "dying" : life == Life::Stable ? "stable" : "up";
+            o << ",\"hp\":" << c->getCurrentHp() << ",\"max\":" << c->getMaxHp() << ",\"temp\":" << c->getTempHp()
+              << ",\"ac\":" << c->getAc() << ",\"speed\":" << c->getSpeed() << ",\"pp\":" << c->getPassivePerception()
+              << ",\"level\":" << c->getLevel() << ",\"life\":\"" << lifeName << "\""
+              << ",\"saves\":[" << c->getDeathSuccesses() << ',' << c->getDeathFailures() << ']'
+              << ",\"conc\":" << (c->isConcentrating() ? "true" : "false")
+              << ",\"bloodied\":" << (c->isBloodied() ? "true" : "false")
+              << ",\"mod\":" << jsonString(c->getDamageMod() == DamageMod::Normal ? "" : damageModName(c->getDamageMod()))
+              << ",\"conditions\":[";
+            for (size_t i = 0; i < c->getConditions().size(); i++) {
+                const Condition& cond = c->getConditions()[i];
+                o << (i ? "," : "") << '[' << jsonString(cond.name) << ',' << cond.rounds << ']';
+            }
+            o << ']';
+        }
+        o << '}';
+    }
+    o << "]}";
+    return o.str();
+}
+
 int main(int, char**) {
 #ifdef _WIN32
     // Crisp text on scaled displays (125%, 150%...): work in scaled points like
@@ -2468,6 +2542,35 @@ int main(int, char**) {
         if (readFile(partyPath, text)) deserializeParty(text, party);
     }
     auto saveParty = [&]() { writeFile(partyPath, serializeParty(party)); };
+
+    // ---- Player screens: a web page on the local network that phones open by QR code.
+    PlayerServer playerServer;
+    bool openShare = false;
+    std::string shareUrl, shareError;
+    std::vector<bool> qrModules;  // row by row, true = dark
+    int qrSize = 0;
+    std::string lastPublished;
+    int publishVersion = 0;
+    double lastPublish = -1.0;
+    auto makeQr = [&](const std::string& text) {
+        const qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(text.c_str(), qrcodegen::QrCode::Ecc::MEDIUM);
+        qrSize = qr.getSize();
+        qrModules.assign(static_cast<size_t>(qrSize * qrSize), false);
+        for (int y = 0; y < qrSize; y++) {
+            for (int x = 0; x < qrSize; x++) qrModules[static_cast<size_t>(y * qrSize + x)] = qr.getModule(x, y);
+        }
+    };
+    auto startSharing = [&]() {
+        shareError.clear();
+        if (!playerServer.start(8080)) {
+            shareError = "Couldn't open a port for the player screens (8080-8099 are all busy).";
+            return;
+        }
+        shareUrl = playerServer.url();
+        makeQr(shareUrl);
+        lastPublished.clear();  // publish right away
+        addLog("Player screens on at " + shareUrl, COL_MUTED);
+    };
 
     // View settings (not part of the encounter, so undo doesn't touch them).
     const std::string settingsPath = savePath("settings.txt");
@@ -2793,11 +2896,21 @@ int main(int, char**) {
         // Buttons at the bottom of the panel, but never over the text above them.
         const float bh = 46 * S;
         const float ph = 34 * S;
-        float startY = std::max(y + 10 * S, b.y - pad - bh);
+        const float gap = 10 * S;
+        const float total = ph + gap + (party.empty() ? 0.0f : ph + gap) + bh;
+        float by = std::max(y + 6 * S, b.y - pad - total);
+        {
+            const std::string label = playerServer.running()
+                ? "Player screens: " + std::to_string(playerServer.viewers()) + " connected##setup"
+                : std::string("Show the QR for player screens##setup");
+            ImGui::SetCursorScreenPos(ImVec2(x0, by));
+            if (quietButton(label.c_str(), ImVec2(x1 - x0, ph))) openShare = true;
+            by += ph + gap;
+        }
+        float startY = by + (party.empty() ? 0.0f : ph + gap);
         if (!party.empty()) {
             const std::vector<PlayerTemplate> missing = partyMissing();
-            const float partyY = std::max(y + 6 * S, startY - ph - 10 * S);
-            startY = std::max(startY, partyY + ph + 10 * S);
+            const float partyY = by;
             ImGui::SetCursorScreenPos(ImVec2(x0, partyY));
             const std::string label = missing.empty() ? std::string("The whole party is here##setup")
                                                       : "Add the party (" + std::to_string(missing.size()) + ")##setup";
@@ -3214,6 +3327,12 @@ int main(int, char**) {
                 beginSection("Encounter");
                 {
                     const float w2 = rowButtonWidth(2);
+                    {
+                        const std::string label = playerServer.running()
+                            ? "Player screens: " + std::to_string(playerServer.viewers()) + " connected##share"
+                            : std::string("Player screens (QR)##share");
+                        if (quietButton(label.c_str(), ImVec2(rowButtonWidth(1), 0))) openShare = true;
+                    }
                     if (!board.inCombat) {
                         if (quietButton("New encounter...", ImVec2(rowButtonWidth(1), 0))) openNewEncounter = true;
                     }
@@ -4012,6 +4131,80 @@ int main(int, char**) {
             ImGui::EndPopup();
         }
 
+        // Player screens: the QR code the phones scan to follow the fight.
+        if (openShare) {
+            ImGui::OpenPopup("Player screens");
+            openShare = false;
+            if (playerServer.running()) {  // the network may have changed since it started
+                shareUrl = playerServer.url();
+                makeQr(shareUrl);
+            }
+        }
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 16 * S);
+        const bool shareOpen = ImGui::BeginPopupModal("Player screens", nullptr,
+                                                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
+        ImGui::PopStyleVar(2);
+        if (shareOpen) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ImGui::CloseCurrentPopup();
+            const float w = 340 * S;
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + w);
+            if (!playerServer.running()) {
+                ImGui::TextUnformatted("Let the players follow the fight on their phones: their character's HP and "
+                                       "stats, the turn order and whose turn it is.");
+                ImGui::Dummy(ImVec2(0, 2 * S));
+                ImGui::TextDisabled("The phones must be on the same Wi-Fi as this computer. They can only look; "
+                                    "enemies show up by name only.");
+                if (!shareError.empty()) ImGui::TextColored(toVec4(COL_RED), "%s", shareError.c_str());
+                ImGui::Dummy(ImVec2(0, 4 * S));
+                if (primaryButton("Start sharing", ImVec2(w, 0))) startSharing();
+            } else {
+                // The QR code: black modules on white, with a quiet zone, snapped to whole points.
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                const int quiet = 3;
+                const float m = std::floor(w / static_cast<float>(qrSize + quiet * 2));
+                const float box = m * static_cast<float>(qrSize + quiet * 2);
+                const ImVec2 p0 = ImGui::GetCursorScreenPos() + ImVec2(std::floor((w - box) * 0.5f), 0);
+                dl->AddRectFilled(p0, p0 + ImVec2(box, box), COL_WHITE, 10 * S);
+                dl->AddRect(p0, p0 + ImVec2(box, box), COL_INK, 10 * S, 0, 2 * S);
+                for (int y = 0; y < qrSize; y++) {
+                    for (int x = 0; x < qrSize; x++) {
+                        if (!qrModules[static_cast<size_t>(y * qrSize + x)]) continue;
+                        const ImVec2 a = p0 + ImVec2(static_cast<float>(x + quiet) * m, static_cast<float>(y + quiet) * m);
+                        dl->AddRectFilled(a, a + ImVec2(m, m), IM_COL32(0, 0, 0, 255));
+                    }
+                }
+                ImGui::Dummy(ImVec2(w, box + 4 * S));
+                const ImVec2 us = boldTextSize(shareUrl.c_str());
+                const ImVec2 up = ImGui::GetCursorScreenPos() + ImVec2(std::max(0.0f, (w - us.x) * 0.5f), 0);
+                boldText(dl, up, COL_TEXT, shareUrl.c_str());
+                ImGui::Dummy(ImVec2(w, us.y + 2 * S));
+                const int phones = playerServer.viewers();
+                const std::string connected = phones == 0 ? std::string("No phones connected yet")
+                                            : std::to_string(phones) + (phones == 1 ? " phone connected" : " phones connected");
+                const ImVec2 cs = ImGui::CalcTextSize(connected.c_str());
+                const ImVec2 cp = ImGui::GetCursorScreenPos() + ImVec2(std::max(0.0f, (w - cs.x - 14 * S) * 0.5f), 0);
+                dl->AddCircleFilled(cp + ImVec2(4 * S, cs.y * 0.5f), 4 * S, phones > 0 ? COL_GREEN : COL_GRAY);
+                dl->AddText(cp + ImVec2(14 * S, 0), phones > 0 ? COL_TEXT : COL_MUTED, connected.c_str());
+                ImGui::Dummy(ImVec2(w, cs.y + 4 * S));
+                ImGui::TextDisabled("Scan it with the phone's camera. The phones must be on the same Wi-Fi as "
+                                    "this computer.");
+                ImGui::Dummy(ImVec2(0, 4 * S));
+                const float w2 = (w - 10 * S) * 0.5f;
+                if (quietButton("Copy link", ImVec2(w2, 0))) ImGui::SetClipboardText(shareUrl.c_str());
+                ImGui::SameLine(0, 10 * S);
+                if (dangerButton("Stop sharing", ImVec2(w2, 0))) {
+                    playerServer.stop();
+                    addLog("Player screens off", COL_MUTED);
+                }
+            }
+            ImGui::PopTextWrapPos();
+            ImGui::Dummy(ImVec2(0, 2 * S));
+            if (quietButton("Close", ImVec2(w, 0))) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
         // New character (from the board menu): the same fields the sidebar form used to have.
         if (openNewChar) {
             ImGui::OpenPopup("New character");
@@ -4288,6 +4481,17 @@ int main(int, char**) {
         }
 
         ImGui::End();
+
+        // Player screens: publish the public state when it changed (checked ~10 times a second).
+        if (playerServer.running() && ImGui::GetTime() - lastPublish > 0.1) {
+            lastPublish = ImGui::GetTime();
+            const std::string state = playerStateJson(encounter, board);
+            if (state != lastPublished) {
+                lastPublished = state;
+                publishVersion++;
+                playerServer.publish("{\"v\":" + std::to_string(publishVersion) + "," + state.substr(1));
+            }
+        }
 
         if (ImGui::GetTime() - lastAutosave > 3.0) {
             writeFile(path, snapshot());
