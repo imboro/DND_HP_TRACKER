@@ -11,10 +11,26 @@ agreed on, and the tracker follows it.
 
 ![The tracker in combat: sidebar on the left; on the board the Turn order list, the spotlight with the card whose turn it is, and the Defeated column](docs/screenshot.png)
 
+## Download
+
+| | |
+|---|---|
+| **Windows** (10 or 11) | [DnD-HP-Tracker-windows.zip](https://github.com/imboro/DND_HP_TRACKER/raw/main/Downloads/Windows/DnD-HP-Tracker-windows.zip) |
+| **Mac** (Apple Silicon: M1 or newer) | [DnD-HP-Tracker-mac.zip](https://github.com/imboro/DND_HP_TRACKER/raw/main/Downloads/Mac/DnD-HP-Tracker-mac.zip) |
+
+The files are also in the [Downloads](Downloads) folder. Unzip and open the app;
+nothing to install. The app isn't signed, so the first time:
+
+- **Windows:** if "Windows protected your PC" appears, click **More info > Run anyway**.
+  Keep `SDL2.dll` in the same folder as the `.exe`.
+- **Mac:** right-click the app > **Open** > **Open**. If macOS still refuses, run
+  `xattr -cr "DnD HP Tracker.app"` in Terminal and open it again.
+
 ---
 
 ## Contents
 
+- [Download](#download)
 - [Quick start](#quick-start)
 - [The screen](#the-screen)
 - [Reading a card](#reading-a-card)

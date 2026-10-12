@@ -11,4 +11,5 @@ windows/dist/
 
 # Archives and Finder junk
 *.zip
+!Downloads/**/*.zip
 .DS_Store
