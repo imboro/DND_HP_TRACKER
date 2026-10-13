@@ -1,5 +1,11 @@
 # DnD HP Tracker
 
+> ### ⬇ Download — version 2.1
+> **[Windows](Downloads/Windows/)** (10 or 11) · **[Mac](Downloads/Mac/)** (Apple Silicon, M1 or newer)
+>
+> Each link opens a page with the download and how to open the app the first time.
+> All versions: the [Downloads](Downloads/) folder.
+
 A combat tracker for Dungeons & Dragons 5e Dungeon Masters. Set up the party and
 the monsters as cards in a **turn order** you arrange by hand, press **Start
 combat**, and pass the turn with one click; rounds count themselves. The tracker
@@ -11,26 +17,10 @@ agreed on, and the tracker follows it.
 
 ![The tracker in combat: sidebar on the left; on the board the Turn order list, the spotlight with the card whose turn it is, and the Defeated column](docs/screenshot.png)
 
-## Download
-
-| | |
-|---|---|
-| **Windows** (10 or 11) | [DnD-HP-Tracker-windows.zip](https://github.com/imboro/DND_HP_TRACKER/raw/main/Downloads/Windows/DnD-HP-Tracker-windows.zip) |
-| **Mac** (Apple Silicon: M1 or newer) | [DnD-HP-Tracker-mac.zip](https://github.com/imboro/DND_HP_TRACKER/raw/main/Downloads/Mac/DnD-HP-Tracker-mac.zip) |
-
-The files are also in the [Downloads](Downloads) folder. Unzip and open the app;
-nothing to install. The app isn't signed, so the first time:
-
-- **Windows:** if "Windows protected your PC" appears, click **More info > Run anyway**.
-  Keep `SDL2.dll` in the same folder as the `.exe`.
-- **Mac:** right-click the app > **Open** > **Open**. If macOS still refuses, run
-  `xattr -cr "DnD HP Tracker.app"` in Terminal and open it again.
-
 ---
 
 ## Contents
 
-- [Download](#download)
 - [Quick start](#quick-start)
 - [The screen](#the-screen)
 - [Reading a card](#reading-a-card)
@@ -512,6 +502,10 @@ open "build/DnD HP Tracker.app"   # the tracker
 ./build/console_demo              # small console demo of the rules classes
 ```
 
+**Downloads folder:** `./make_downloads.sh` builds the Mac and Windows apps and
+puts them in `Downloads/` with the version from `CMakeLists.txt` (then commit and
+push). The pieces it runs:
+
 **Shareable Mac app:**
 
 ```
@@ -576,6 +570,8 @@ on their own (`tests/logic_tests.cpp`) and could be reused by another front end.
 | File | What it is |
 |---|---|
 | `tests/logic_tests.cpp` | Tests for the rules layer |
+| `make_downloads.sh` | Builds both apps into `Downloads/` (the folder people download from) |
+| `Downloads/` | The ready-to-use apps: `Windows/` and `Mac/`, each with a how-to-open guide |
 | `package_mac.sh` | Builds the shareable app bundle and zip |
 | `player_server.h/.cpp` | Player screens: the local web server (on its own thread) and the network address for the QR |
 | `player_page.inc` | Player screens: the phone page (HTML, CSS and JavaScript) |

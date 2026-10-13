@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
-project(DnDHpTracker CXX)
+# The app version: shown in the Mac app and on the downloads (make_downloads.sh).
+project(DnDHpTracker VERSION 2.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -86,8 +87,8 @@ if(APPLE)
         OUTPUT_NAME "DnD HP Tracker"
         MACOSX_BUNDLE_BUNDLE_NAME "DnD HP Tracker"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.hotelworkshop.hptracker"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
         MACOSX_BUNDLE_INFO_STRING "DnD HP Tracker"
         MACOSX_BUNDLE_COPYRIGHT ""
         MACOSX_BUNDLE_ICON_FILE "hptracker.icns"
