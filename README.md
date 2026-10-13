@@ -57,8 +57,8 @@ nothing to install. The app isn't signed, so the first time:
 
 1. Open **DnD HP Tracker.app**. The first time on a new Mac, right-click it and choose
    **Open**, because the app isn't signed by a paid Apple developer account.
-2. On first launch you get a sample Hero, Goblin and Orc. Delete them by dragging
-   them onto the trash can, or use **New encounter > Remove everything**.
+2. On first launch you get a sample Hero, Goblin and Orc. Delete them with a right-click
+   > **Delete** (or select them and press Delete), or use **New encounter > Remove everything**.
 3. **Set up:** right-click the list and choose **New character...** to add your party
    and monsters (or **Add from library**). Drag the cards into turn order. Tick
    **Also save to the party** for your players: next time **Add the party** brings
@@ -101,7 +101,7 @@ Everything autosaves, so closing the app never loses the fight.
   action buttons. Before combat, the setup panel with **Start combat**.
 - **Defeated** (bottom right): enemies at 0 HP and players who have died. Cards fall
   here by themselves.
-- Alerts pop up in the bottom-right corner, above the trash can.
+- Alerts pop up in the bottom-right corner.
 
 ---
 
@@ -400,8 +400,8 @@ The board has two columns:
   Drop it there. The other cards slide out of the way.
 - **Scroll** a column with the mouse wheel or trackpad when it holds more cards than
   fit. The view follows the turn when it moves.
-- **Trash:** drop a card (or a selected group) on the trash can in the corner to
-  delete it. Undo brings it back.
+- **Deleting:** right-click a card > **Delete**, or select cards and press Delete
+  (or Backspace). Undo brings them back.
 - **Card size** (Combat tab > Board): shrink cards to 60–100% to fit more creatures.
 
 ---
@@ -470,7 +470,7 @@ Files are stored in `~/Library/Application Support/HotelWorkshop/HPTracker/`:
 | New character / Add from library | Right-click empty space on the board |
 | Next turn | Space or Right arrow (or the TURN ribbon, or the Next turn button) |
 | Reorder the turn order | Drag a card up or down |
-| Delete | Drag to the trash, or Delete/Backspace for the selection |
+| Delete | Delete/Backspace for the selection, or right-click > Delete |
 | Duplicate | Cmd+D |
 | Undo / Redo | Cmd+Z / Cmd+Shift+Z or Cmd+Y |
 | Close a menu or window | Esc |
@@ -526,7 +526,7 @@ bundled inside, so it runs on Macs without Homebrew. It's built for Apple Silico
 
 **Scripted UI tests:** `tools/ui_test/run_ui_tests.sh` builds a test copy of the app that
 drives itself with simulated mouse and keyboard input (clicks, box-select, area damage,
-undo, death saves, the edit dialog, the trash, the turn order, ...), prints PASS/FAIL per check and
+undo, death saves, the edit dialog, deleting, the turn order, ...), prints PASS/FAIL per check and
 writes screenshots to `build/ui_test/`.
 
 ---
@@ -557,7 +557,7 @@ on their own (`tests/logic_tests.cpp`) and could be reused by another front end.
 | `app_board.cpp` | The board: Turn order and Defeated columns, spotlight, setup panel, drag and drop |
 | `app_popups.cpp` | Menus and windows: card menu, board menu, New character, Edit, New encounter, QR |
 | `board.h/.cpp` | `BoardState` and `CardState`: turn order, selection and per-card animation state, kept in step with `Encounter` |
-| `board_view.h/.cpp` | Drawing a card row, the spotlight, damage numbers and the trash |
+| `board_view.h/.cpp` | Drawing a card row, the spotlight and damage numbers |
 | `looks.h/.cpp` | Card colors and icons, and the picker for them |
 | `ui_kit.h/.cpp` | The look: palette, fonts, ink-outline boxes, buttons, section boxes, tabs, line icons |
 | `alerts.h/.cpp` | The combat log entries and the alert toasts |

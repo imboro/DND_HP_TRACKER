@@ -26,6 +26,6 @@ struct Alert {
 float alertOpacity(const Alert& al, double now);
 bool alertExpired(const Alert& al, double now);
 
-// Alert toasts in the board's bottom-right corner, stacked upward above the
-// trash (newest at the bottom).
+// Alert toasts in the board's bottom-right corner, stacked upward (newest at the
+// bottom).
 void drawToasts(std::vector<Alert>& alerts, ImVec2 boardOrigin, ImVec2 boardSize, double now, float dt, float S);

@@ -6,7 +6,7 @@
 //   app.cpp          the frame loop, loading and saving, and the actions
 //                    (damage, turns, undo...) the UI calls
 //   app_sidebar.cpp  the sidebar: summary tiles and the Combat / Library / Log tabs
-//   app_board.cpp    the board: Turn order and Defeated columns, spotlight, trash
+//   app_board.cpp    the board: Turn order and Defeated columns, spotlight
 //   app_popups.cpp   menus and windows: card menu, New character, Edit, QR...
 #include <SDL.h>
 

@@ -1,6 +1,6 @@
 #pragma once
 // Drawing the board's pieces: the compact card rows, the spotlight panel, the
-// floating damage numbers and the trash. These functions draw and report what
+// floating damage numbers. These functions draw and report what
 // the user clicked; the app decides what happens (undo, log, rules).
 #include <functional>
 #include <string>
@@ -48,6 +48,3 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
 
 // Floating label and crit starburst; drawn in a top pass above all cards.
 void drawCardEffects(const CardState& st, ImVec2 size, float S);
-
-// The trash in the board's corner: cards dropped on it are deleted.
-void drawTrash(ImVec2 min, float size, bool dragging, bool hot, int count, float time, float S);

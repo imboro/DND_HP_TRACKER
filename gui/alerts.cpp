@@ -25,7 +25,7 @@ bool alertExpired(const Alert& al, double now) {
 }
 
 // Alert toasts in the board's bottom-right corner, stacked upward above the
-// trash (newest at the bottom). They fade away on their own; clicking one fades
+// (newest at the bottom). They fade away on their own; clicking one fades
 // it out early.
 void drawToasts(std::vector<Alert>& alerts, ImVec2 boardOrigin, ImVec2 boardSize, double now, float dt,
                 float S) {
@@ -34,7 +34,7 @@ void drawToasts(std::vector<Alert>& alerts, ImVec2 boardOrigin, ImVec2 boardSize
     const float x1 = boardOrigin.x + boardSize.x - 22 * S;
     const float textW = tw - 46 * S;
     const float lineH = ImGui::GetTextLineHeight();
-    const float bottom = boardSize.y - 24 * S - 84 * S - 18 * S;  // just above the trash
+    const float bottom = boardSize.y - 24 * S;
     const float gapY = 12 * S;
     float total = 0.0f;
     for (const Alert& al : alerts) total += ImGui::CalcTextSize(al.text.c_str(), nullptr, false, textW).y + 22 * S + gapY;

@@ -155,13 +155,18 @@
                                std::snprintf(editName, sizeof(editName), "Paladin"); g_shot = "05_edit"; });
                 clickAt([=]() { return rectCenter("Apply"); });
                 act(3, [&]() { check(exists("Paladin") && !exists("Hero"), "edit popup Apply renames Hero to Paladin"); });
-                // 14) Drag Orc 2 into the trash
+                // 14) No trash any more: dropping Orc 2 in the bottom-right corner keeps it;
+                //     selecting it and pressing Delete removes it
                 act(2, [&]() { ImVec2 p = bodyPt("Orc 2"); motion(p.x, p.y); button(true, p.x, p.y); });
                 act(3, [&]() { motion(g_boardOrigin.x + 300 * s, g_boardOrigin.y + 300 * s); });
-                act(3, [&]() { const float ts = 84 * s; motion(g_boardOrigin.x + g_boardSize.x - ts / 2 - 24 * s, g_boardOrigin.y + g_boardSize.y - ts / 2 - 24 * s); });
-                act(1, [&]() { g_shot = "06_trash"; });
-                act(3, [&]() { button(false, g_boardOrigin.x + g_boardSize.x - 84 * s / 2 - 24 * s, g_boardOrigin.y + g_boardSize.y - 84 * s / 2 - 24 * s); });
-                act(2, [&]() { check(!exists("Orc 2") && exists("Orc 1"), "dragging Orc 2 to the trash deletes it"); });
+                act(3, [&]() { motion(g_boardOrigin.x + g_boardSize.x - 66 * s, g_boardOrigin.y + g_boardSize.y - 66 * s); });
+                act(1, [&]() { g_shot = "06_corner_drop"; });
+                act(3, [&]() { button(false, g_boardOrigin.x + g_boardSize.x - 66 * s, g_boardOrigin.y + g_boardSize.y - 66 * s); });
+                act(20, [&]() { check(exists("Orc 2"), "dropping a card in the corner no longer deletes it"); });
+                clickAt([=]() { return bodyPt("Orc 2"); });
+                act(2, [&]() { key(true, SDLK_DELETE, SDL_SCANCODE_DELETE, 0); });
+                act(1, [&]() { key(false, SDLK_DELETE, SDL_SCANCODE_DELETE, 0); });
+                act(3, [&]() { check(!exists("Orc 2") && exists("Orc 1"), "Delete removes the selected card (Orc 2)"); });
                 // 15) Save format round trip + v1 compatibility
                 act(1, [&]() {
                     const std::string a = serializeBoard(encounter, board);

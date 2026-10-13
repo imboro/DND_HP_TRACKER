@@ -39,7 +39,6 @@ void App::drawBoard(float height, float panelRound, bool anyPopup) {
     // ---- Layout, in board coordinates: the Turn order list on the left; on the
     // right the spotlight (one card shown big, or the setup panel) above Defeated.
     const float colMargin = 16 * S, colGap = 14 * S, colHeader = 44 * S, colPad = 10 * S;
-    const float trashSize = 84 * S;
     const float turnColW = std::clamp(std::floor((boardSize.x - 2 * colMargin - colGap) * 0.47f), 320 * S, 520 * S);
     const float rightX = colMargin + turnColW + colGap;
     const float rightW = std::max(220 * S, boardSize.x - colMargin - rightX);
@@ -47,7 +46,7 @@ void App::drawBoard(float height, float panelRound, bool anyPopup) {
     const ImVec2 spotMin(rightX, colMargin), spotMax(rightX + rightW, colMargin + spotH);
     const ImVec2 colMin[2] = {ImVec2(colMargin, colMargin), ImVec2(rightX, colMargin + spotH + colGap)};
     const ImVec2 colMax[2] = {ImVec2(colMargin + turnColW, boardSize.y - colMargin),
-                              ImVec2(std::max(rightX + 160 * S, boardSize.x - 24 * S - trashSize - 14 * S),
+                              ImVec2(rightX + rightW,
                                      std::max(colMargin + spotH + colGap + colHeader + 40 * S, boardSize.y - colMargin))};
     // Area the cards live in (screen coordinates); a little extra on top for the turn ribbon.
     ImVec2 areaMin[2], areaMax[2];
@@ -58,31 +57,10 @@ void App::drawBoard(float height, float panelRound, bool anyPopup) {
     const float cardH = cardHeight();
     const float slotH = cardH + 11 * S;
 
-    // Trash drop zone (bottom-right). Releasing a dragged card over it deletes it.
-    const ImVec2 trashMin(boardOrigin.x + boardSize.x - trashSize - 24 * S,
-                          boardOrigin.y + boardSize.y - trashSize - 24 * S);
-
-    auto overTrash = [&](CardRef r) {
-        const float m = 18 * S;
-        const bool mouseIn = mouse.x >= trashMin.x - m && mouse.x <= trashMin.x + trashSize + m &&
-                             mouse.y >= trashMin.y - m && mouse.y <= trashMin.y + trashSize + m;
-        const CardState& st = board.get(r);
-        const ImVec2 center(boardOrigin.x + st.pos.x + st.size.x * 0.5f, boardOrigin.y + st.pos.y + st.size.y * 0.5f);
-        const bool centerIn = center.x >= trashMin.x && center.x <= trashMin.x + trashSize &&
-                              center.y >= trashMin.y && center.y <= trashMin.y + trashSize;
-        return mouseIn || centerIn;
-    };
-
-    // Releasing a dragged card: over the trash it is deleted; in the Turn order it is
-    // dropped into the gap (reordering the turn order). This runs before the layout
-    // so everything below sees the updated order.
+    // Releasing a dragged card drops it into the gap in the Turn order (reordering it).
+    // This runs before the layout so everything below sees the updated order.
     if (board.dragValid && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-        if (overTrash(board.drag)) {
-            const bool group = board.get(board.drag).selected;
-            const std::vector<CardRef> victims = group ? board.selectedRefs() : std::vector<CardRef>{board.drag};
-            pushUndoState(pressSnapshot);
-            deleteRefs(victims, true);
-        } else if (board.get(board.drag).column == 0 && dragSlot >= 0) {
+        if (board.get(board.drag).column == 0 && dragSlot >= 0) {
             board.placeInTurnOrder(board.drag, dragSlot);
             if (snapshot() != pressSnapshot) pushUndoState(pressSnapshot);
         }
@@ -445,10 +423,6 @@ void App::drawBoard(float height, float panelRound, bool anyPopup) {
             board.dragValid = true;
         }
     }
-    const bool groupDragNow = board.dragValid && board.get(board.drag).selected;
-    drawTrash(trashMin, trashSize, board.dragValid, board.dragValid && overTrash(board.drag),
-              board.dragValid ? (groupDragNow ? static_cast<int>(board.selectedRefs().size()) : 1) : 0,
-              static_cast<float>(ImGui::GetTime()), S);
     {
         const double now = ImGui::GetTime();
         alerts.erase(std::remove_if(alerts.begin(), alerts.end(), [&](const Alert& a) { return alertExpired(a, now); }),
