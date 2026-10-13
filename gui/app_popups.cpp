@@ -235,9 +235,13 @@ void App::drawShareWindow() {
             ImGui::Dummy(ImVec2(w, cs.y + 4 * S));
             ImGui::TextDisabled("Scan it with the phone's camera. The phones must be on the same Wi-Fi as "
                                 "this computer.");
+            // Chat apps (WhatsApp...) don't turn a bare network address into a link.
+            ImGui::TextDisabled("Sending the link in a chat? It won't be clickable there: copy it into "
+                                "the phone's browser instead.");
             ImGui::Dummy(ImVec2(0, 4 * S));
             const float w2 = (w - 10 * S) * 0.5f;
             if (quietButton("Copy link", ImVec2(w2, 0))) ImGui::SetClipboardText(shareUrl.c_str());
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Paste it into the phone's browser address bar");
             ImGui::SameLine(0, 10 * S);
             if (dangerButton("Stop sharing", ImVec2(w2, 0))) {
                 playerServer.stop();

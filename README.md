@@ -421,6 +421,9 @@ shakes on a big hit), the turn order, the round, and an **"It's your turn!"** ba
 
 - The phones must be on the **same Wi-Fi** as the computer. Some public or university
   networks block devices from seeing each other; a phone hotspot works around that.
+- **Sharing the link in a chat:** WhatsApp and other chat apps don't make a bare
+  network address (`http://192.168.x.x:8080/`) clickable. Use the QR code, or
+  paste the link (**Copy link**) into the phone's browser.
 - It is **read-only**: phones can't change anything.
 - **Enemies** appear only by name in the turn order (no HP), and only once combat has
   started, so the setup stays a surprise. Defeated enemies disappear. DM notes are
