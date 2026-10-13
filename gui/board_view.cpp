@@ -451,8 +451,12 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
             dl->AddRectFilled(p, pEnd, withAlpha(flash, static_cast<int>((st.crit ? 110 : 55) * k)), round);
         }
     }
-    // A strip of the card's color down its left edge.
-    dl->AddRectFilled(p, ImVec2(p.x + 6 * S, pEnd.y), fadeAlpha(accent, 0.85f), round, ImDrawFlags_RoundCornersLeft);
+    // A strip of the card's color down its left edge: the card's own rounded shape,
+    // clipped to its first few pixels, so the strip follows the corners. (A narrow
+    // rect can't take the card's corner radius and would poke out of the outline.)
+    dl->PushClipRect(p, ImVec2(p.x + 6 * S, pEnd.y), true);
+    dl->AddRectFilled(p, pEnd, fadeAlpha(accent, 0.85f), round);
+    dl->PopClipRect();
     dl->AddRect(p, pEnd, outlineCol, round, 0, outline);
 
     // Left: icon tile with a line glyph in the side's color.
