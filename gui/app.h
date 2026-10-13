@@ -158,6 +158,8 @@ private:
     int dragSlot = -1;           // Turn order slot the dragged card would drop into
     bool openBoardMenu = false;  // right-click on empty space
     int boardMenuSlot = -1;      // Turn order slot under that right-click (-1 = at the end)
+    float spotH = -1.0f;         // spotlight panel height, eased (-1 = not laid out yet)
+    float setupPanelH = 0.0f;    // height the setup panel needed last frame
     bool spotTurnValid = false;  // the turn the spotlight last followed
     CardRef spotTurn{Side::Players, 0};
 

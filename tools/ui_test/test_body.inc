@@ -314,7 +314,11 @@
                     check(exists("Aria") && C("Aria")->getCurrentHp() == C("Aria")->getMaxHp() && C("Aria")->getLevel() == 5 && !exists("Dax 1"),
                           "Add the party brings back only the missing player, at full HP");
                     g_forceTab = 1; });
-                act(30, [&]() { g_shot = "20_party"; });
+                act(30, [&]() { g_shot = "20_party";
+                                const auto it = g_rects.find("Start combat");
+                                const float boxBottom = g_boardOrigin.y + 16 * s + spotH;
+                                check(it != g_rects.end() && it->second.Max.y <= boxBottom - 8 * s,
+                                      "with the party saved, Start combat stays inside the setup panel"); });
                 act(2, [&]() { g_forceTab = 0; });
                 // 18c) Card looks: color and icon, kept by the save file and both libraries
                 act(2, [&]() {

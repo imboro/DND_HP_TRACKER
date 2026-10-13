@@ -42,7 +42,16 @@ void App::drawBoard(float height, float panelRound, bool anyPopup) {
     const float turnColW = std::clamp(std::floor((boardSize.x - 2 * colMargin - colGap) * 0.47f), 320 * S, 520 * S);
     const float rightX = colMargin + turnColW + colGap;
     const float rightW = std::max(220 * S, boardSize.x - colMargin - rightX);
-    const float spotH = std::clamp(std::floor(boardSize.y * 0.52f), 300 * S, 430 * S);
+    // The spotlight's height. Before combat it grows to fit the setup panel (its
+    // buttons must stay inside the box); Defeated is empty then and gives up the room.
+    float spotTarget = std::clamp(std::floor(boardSize.y * 0.52f), 300 * S, 430 * S);
+    if (!board.inCombat && setupPanelH > 0.0f) {
+        const float most = boardSize.y - 2 * colMargin - colGap - colHeader - 40 * S;
+        spotTarget = std::max(spotTarget, std::min(setupPanelH, most));
+    }
+    if (spotH < 0.0f) spotH = spotTarget;
+    spotH = approach(spotH, spotTarget, 14.0f, dtB);
+    if (std::fabs(spotH - spotTarget) < 0.5f) spotH = spotTarget;
     const ImVec2 spotMin(rightX, colMargin), spotMax(rightX + rightW, colMargin + spotH);
     const ImVec2 colMin[2] = {ImVec2(colMargin, colMargin), ImVec2(rightX, colMargin + spotH + colGap)};
     const ImVec2 colMax[2] = {ImVec2(colMargin + turnColW, boardSize.y - colMargin),
@@ -482,6 +491,8 @@ void App::drawSetupPanel(ImVec2 a, ImVec2 b) {
     const float ph = 34 * S;
     const float gap = 10 * S;
     const float total = ph + gap + (party.empty() ? 0.0f : ph + gap) + bh;
+    // The height this panel needs (read by the board layout next frame).
+    setupPanelH = (y + 6 * S + total + pad) - a.y;
     float by = std::max(y + 6 * S, b.y - pad - total);
     {
         const std::string label = playerServer.running()
