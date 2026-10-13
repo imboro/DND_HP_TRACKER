@@ -1,6 +1,6 @@
 # DnD HP Tracker
 
-> ### ⬇ Download — version 2.1
+> ### ⬇ Download — version 2.1.1
 > **[Windows](Downloads/Windows/)** (10 or 11) · **[Mac](Downloads/Mac/)** (Apple Silicon, M1 or newer)
 >
 > Each link opens a page with the download and how to open the app the first time.

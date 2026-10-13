@@ -7,6 +7,7 @@
 #   Downloads/README.md                       which one to download (version, date)
 #   Downloads/Windows/DnD-HP-Tracker-Windows.zip
 #   Downloads/Mac/DnD-HP-Tracker-Mac.zip
+#   README.md                                 the version in its download box
 #
 # The version comes from project(... VERSION x.y ...) in CMakeLists.txt.
 # Commit and push the Downloads folder afterwards.
@@ -46,6 +47,9 @@ account, so the first time Windows or macOS asks you to confirm; the guides show
 
 [← Back to the project](../)
 EOF
+
+# The download box at the top of the project README shows the version too.
+sed -i '' -E "s/^> ### ⬇ Download — version [0-9.]+$/> ### ⬇ Download — version $VERSION/" README.md
 
 echo
 echo "Downloads ready (version $VERSION):"
