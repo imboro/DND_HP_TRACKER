@@ -27,6 +27,37 @@ struct BarVis {
     bool hasChunk;
 };
 
+// Fills the part of a pill-shaped bar [barMin, barMax] between x0 and x1, following
+// its rounded ends (a plain rectangle would poke out of the outline at the corners).
+static void fillBarSpan(ImDrawList* dl, ImVec2 barMin, ImVec2 barMax, float x0, float x1, ImU32 col) {
+    x0 = std::max(x0, barMin.x);
+    x1 = std::min(x1, barMax.x);
+    if (x1 - x0 < 0.5f) return;
+    const float r = (barMax.y - barMin.y) * 0.5f;
+    const float cy = barMin.y + r;
+    const float leftCap = barMin.x + r, rightCap = barMax.x - r;  // centers of the round ends
+    auto halfHeight = [&](float x) {
+        const float dx = x < leftCap ? leftCap - x : (x > rightCap ? x - rightCap : 0.0f);
+        return std::sqrt(std::max(0.0f, r * r - dx * dx));
+    };
+    // Sample densely across the round ends; the straight middle needs no points.
+    std::vector<float> xs = {x0, x1};
+    for (int i = 0; i <= 10; i++) {
+        const float t = static_cast<float>(i) / 10.0f;
+        xs.push_back(barMin.x + r * t);
+        xs.push_back(rightCap + r * t);
+    }
+    std::sort(xs.begin(), xs.end());
+    std::vector<ImVec2> pts;
+    for (float x : xs) {
+        if (x >= x0 && x <= x1) pts.push_back(ImVec2(x, cy - halfHeight(x)));
+    }
+    for (auto it = xs.rbegin(); it != xs.rend(); ++it) {
+        if (*it >= x0 && *it <= x1) pts.push_back(ImVec2(*it, cy + halfHeight(*it)));
+    }
+    dl->AddConvexPolyFilled(pts.data(), static_cast<int>(pts.size()), col);
+}
+
 static BarVis computeBar(const CardState& st, int hp, int maxHp) {
     BarVis v{0.0f, 0.0f, false};
     if (maxHp <= 0) return v;
@@ -545,7 +576,7 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
         if (bar.fillEnd > 0.0f) {
             const float targetFrac = c.getMaxHp() > 0
                 ? static_cast<float>(c.getCurrentHp()) / static_cast<float>(c.getMaxHp()) : 0.0f;
-            dl->AddRectFilled(barMin, ImVec2(barMin.x + barW * bar.fillEnd, barMax.y), hpColor(targetFrac), barRound);
+            fillBarSpan(dl, barMin, barMax, barMin.x, barMin.x + barW * bar.fillEnd, hpColor(targetFrac));
         }
         if (bar.hasChunk && bar.chunkEnd > bar.fillEnd) {
             // The "pre-bar": the part of the bar about to be lost or gained.
@@ -558,7 +589,7 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
             }
             const float x0 = barMin.x + barW * bar.fillEnd;
             const float x1 = barMin.x + barW * bar.chunkEnd;
-            dl->AddRectFilled(ImVec2(x0, barMin.y), ImVec2(x1, barMax.y), chunk);
+            fillBarSpan(dl, barMin, barMax, x0, x1, chunk);
         }
         dl->PopClipRect();
         dl->AddRect(barMin, barMax, showDead ? COL_BORDER_HI : COL_INK, barRound, 0, 1.25f * S);
@@ -712,14 +743,14 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
         dl->PushClipRect(barMin, barMax, true);
         if (bar.fillEnd > 0.0f) {
             const float frac = c.getMaxHp() > 0 ? static_cast<float>(c.getCurrentHp()) / static_cast<float>(c.getMaxHp()) : 0.0f;
-            dl->AddRectFilled(barMin, ImVec2(barMin.x + barW * bar.fillEnd, barMax.y), hpColor(frac), barH * 0.5f);
+            fillBarSpan(dl, barMin, barMax, barMin.x, barMin.x + barW * bar.fillEnd, hpColor(frac));
         }
         if (bar.hasChunk && bar.chunkEnd > bar.fillEnd) {
             const float k = clamp01(st.t / 0.3f);
             const ImU32 chunk = !st.heal
                 ? IM_COL32(255, static_cast<int>(lerpf(214, 90, k)), static_cast<int>(lerpf(120, 80, k)), 255)
                 : IM_COL32(static_cast<int>(lerpf(200, 120, k)), static_cast<int>(lerpf(250, 220, k)), static_cast<int>(lerpf(170, 140, k)), 255);
-            dl->AddRectFilled(ImVec2(barMin.x + barW * bar.fillEnd, barMin.y), ImVec2(barMin.x + barW * bar.chunkEnd, barMax.y), chunk);
+            fillBarSpan(dl, barMin, barMax, barMin.x + barW * bar.fillEnd, barMin.x + barW * bar.chunkEnd, chunk);
         }
         dl->PopClipRect();
         dl->AddRect(barMin, barMax, dead ? COL_BORDER_HI : COL_INK, barH * 0.5f, 0, 1.75f * S);

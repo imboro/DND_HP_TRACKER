@@ -319,6 +319,12 @@
                                 const float boxBottom = g_boardOrigin.y + 16 * s + spotH;
                                 check(it != g_rects.end() && it->second.Max.y <= boxBottom - 8 * s,
                                       "with the party saved, Start combat stays inside the setup panel"); });
+                // The pre-bar follows the bar's rounded ends (screenshots mid-hit and mid-heal to full).
+                act(2, [&]() { applyHit(findRef("Aria"), 15); });
+                act(14, [&]() { g_shot = "24_prebar_hit"; });
+                act(60, [&]() { applyHeal(findRef("Aria"), 15); });
+                act(14, [&]() { g_shot = "24_prebar_heal"; });
+                act(60, [&]() { check(C("Aria")->getCurrentHp() == 20, "Aria is back to full HP after the pre-bar shots"); });
                 act(2, [&]() { g_forceTab = 0; });
                 // 18c) Card looks: color and icon, kept by the save file and both libraries
                 act(2, [&]() {
