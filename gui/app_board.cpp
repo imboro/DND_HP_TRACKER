@@ -231,7 +231,10 @@ void App::drawBoard(float height, float panelRound, bool anyPopup) {
                 dl->AddRectFilled(ImVec2(x1 - 4 * S, y0), ImVec2(x1, y0 + thumbH), COL_BORDER_HI, 2 * S);
             }
         }
-        inkBox(dl, boardOrigin + spotMin, boardOrigin + spotMax, 18 * S, S, COL_PANEL, 3.0f);
+        {
+            const bool showsCard = board.inCombat && board.focusValid && encounter.at(board.focus.side, board.focus.index);
+            drawSpotlightBox(boardOrigin + spotMin, boardOrigin + spotMax, encounter, showsCard ? &board.focus : nullptr, S);
+        }
         // The gap a dragged card would drop into.
         if (gapSlot >= 0) {
             const float gy = boardOrigin.y + colMin[0].y + colHeader + static_cast<float>(gapSlot) * slotH - board.scroll[0];

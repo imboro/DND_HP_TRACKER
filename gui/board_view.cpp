@@ -27,6 +27,48 @@ struct BarVis {
     bool hasChunk;
 };
 
+// ---- Enemy look: a dark card tinted with the enemy's color, with cut corners ----------
+// Players are white cards with round corners; enemies stand apart by shape and by tone,
+// whatever colors were picked for them.
+
+static const ImU32 COL_ON_DARK = IM_COL32(244, 244, 240, 255);        // text on an enemy card
+static const ImU32 COL_ON_DARK_MUTED = IM_COL32(180, 180, 174, 255);
+
+// The body of a living enemy: near black with a little of its own color.
+static ImU32 enemyBody(ImU32 sideColor) {
+    const ImU32 base = mixColor(COL_WHITE, IM_COL32(31, 31, 35, 255), 0.92f);
+    return mixColor(base, sideColor, 0.162f);
+}
+
+// The 8 corners of the box [a, b] with its corners cut off by `cut`.
+static void chamferPoints(ImVec2 a, ImVec2 b, float cut, ImVec2 out[8]) {
+    cut = std::min(cut, std::min(b.x - a.x, b.y - a.y) * 0.5f);
+    out[0] = ImVec2(a.x + cut, a.y); out[1] = ImVec2(b.x - cut, a.y);
+    out[2] = ImVec2(b.x, a.y + cut); out[3] = ImVec2(b.x, b.y - cut);
+    out[4] = ImVec2(b.x - cut, b.y); out[5] = ImVec2(a.x + cut, b.y);
+    out[6] = ImVec2(a.x, b.y - cut); out[7] = ImVec2(a.x, a.y + cut);
+}
+
+// A card's shape, filled or outlined: round corners, or cut ones (`cut` = enemy).
+static void fillCardShape(ImDrawList* dl, ImVec2 a, ImVec2 b, float round, bool cut, ImU32 col) {
+    if (!cut) {
+        dl->AddRectFilled(a, b, col, round);
+        return;
+    }
+    ImVec2 pts[8];
+    chamferPoints(a, b, round, pts);
+    dl->AddConvexPolyFilled(pts, 8, col);
+}
+static void strokeCardShape(ImDrawList* dl, ImVec2 a, ImVec2 b, float round, bool cut, ImU32 col, float thick) {
+    if (!cut) {
+        dl->AddRect(a, b, col, round, 0, thick);
+        return;
+    }
+    ImVec2 pts[8];
+    chamferPoints(a, b, round, pts);
+    dl->AddPolyline(pts, 8, col, ImDrawFlags_Closed, thick);
+}
+
 // Fills the part of a pill-shaped bar [barMin, barMax] between x0 and x1, following
 // its rounded ends (a plain rectangle would poke out of the outline at the corners).
 static void fillBarSpan(ImDrawList* dl, ImVec2 barMin, ImVec2 barMax, float x0, float x1, ImU32 col) {
@@ -246,7 +288,7 @@ struct Chip {
 // Status chips along the bottom of a card; "+N" when they don't all fit.
 // A chip's color tints its fill and border and colors its text.
 static void drawChips(ImDrawList* dl, ImVec2 start, float maxX, const std::vector<Chip>& chips, float S,
-                      float scale = 1.0f) {
+                      float scale = 1.0f, bool onDark = false) {
     const float mul = 0.78f * scale;
     const float h = 19 * S * scale;
     const float padX = 7 * S * scale;
@@ -267,10 +309,11 @@ static void drawChips(ImDrawList* dl, ImVec2 start, float maxX, const std::vecto
         const ImU32 col = chips[i].fill;
         const float k = static_cast<float>(col >> IM_COL32_A_SHIFT) / 255.0f;
         dl->AddRectFilled(ImVec2(x, start.y), ImVec2(x + w, start.y + h),
-                          withAlpha(col, static_cast<int>(34 * k)), h * 0.5f);
+                          withAlpha(col, static_cast<int>((onDark ? 70 : 34) * k)), h * 0.5f);
         dl->AddRect(ImVec2(x, start.y), ImVec2(x + w, start.y + h),
                     withAlpha(col, static_cast<int>(150 * k)), h * 0.5f, 0, 1.0f * S);
-        const ImU32 textCol = withAlpha(mixColor(col, COL_INK, 0.35f), static_cast<int>(255 * k));
+        const ImU32 textCol = withAlpha(onDark ? mixColor(col, COL_WHITE, 0.5f) : mixColor(col, COL_INK, 0.35f),
+                                        static_cast<int>(255 * k));
         fontText(dl, boldFont(), ImVec2(x + padX, start.y + (h - ts.y) * 0.5f), textCol, chips[i].text.c_str(), mul);
         x += w + gap;
     }
@@ -406,6 +449,12 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
 
     const ImU32 sideColor = creatureColor(side, c);
     const ImU32 accent = mixColor(sideColor, COL_GRAY, deadK);
+    // Enemies: dark card with cut corners (fading to the same light gray as players
+    // when they die, so the Defeated column looks alike).
+    const bool enemy = side == Side::Creatures;
+    const bool onDark = enemy && deadK < 0.5f;
+    const ImU32 textCol = mixColor(enemy ? COL_ON_DARK : COL_TEXT, COL_MUTED, deadK);
+    const ImU32 mutedCol = enemy ? mixColor(COL_ON_DARK_MUTED, COL_MUTED, deadK) : COL_MUTED;
 
     // Hover state of the drag handle is known from the previous frame via the
     // item ID, so the fill can react without submitting the handle first.
@@ -418,8 +467,9 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
         const float e = easeOutCubic(st.selAnim);
         const float g = lerpf(0.0f, 4.0f, e) * S;
         const ImVec2 r0 = p - ImVec2(g, g), r1 = pEnd + ImVec2(g + 3 * S, g + 4 * S);
-        dl->AddRectFilled(r0, r1, withAlpha(COL_SELECT, static_cast<int>(40 * e)), round + g);
-        dl->AddRect(r0, r1, withAlpha(COL_SELECT, static_cast<int>(255 * e)), round + g, 0, 2.5f * S);
+        const float ringRound = enemy ? round + g * 0.414f : round + g;  // a cut corner moves out by g(√2 − 1)
+        fillCardShape(dl, r0, r1, ringRound, enemy, withAlpha(COL_SELECT, static_cast<int>(40 * e)));
+        strokeCardShape(dl, r0, r1, ringRound, enemy, withAlpha(COL_SELECT, static_cast<int>(255 * e)), 2.5f * S);
     }
 
     // Hard ink shadow: rises on hover, more while held, flattens when dead.
@@ -428,17 +478,22 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
     st.lift = approach(st.lift, liftTarget, 18.0f, dt);
     const float lift = st.lift;
     const ImU32 outlineCol = mixColor(COL_INK, COL_BORDER_HI, deadK);
-    dl->AddRectFilled(p + ImVec2(lift * S, (lift + 1) * S), pEnd + ImVec2(lift * S, (lift + 1) * S), outlineCol, round);
+    fillCardShape(dl, p + ImVec2(lift * S, (lift + 1) * S), pEnd + ImVec2(lift * S, (lift + 1) * S), round, enemy, outlineCol);
     // Body: dying players pulse faintly like a heartbeat; the dead fade to gray;
     // the card shown in the spotlight gets a faint tint.
     ImU32 aliveBody = hoveredOrActive ? COL_CARD_HI : COL_CARD;
     if (isFocus) aliveBody = IM_COL32(250, 248, 238, 255);
+    if (enemy) {
+        aliveBody = enemyBody(sideColor);
+        if (isFocus) aliveBody = mixColor(aliveBody, COL_WHITE, 0.09f);
+        else if (hoveredOrActive) aliveBody = mixColor(aliveBody, COL_WHITE, 0.05f);
+    }
     if (life == Life::Dying || (showDead && side == Side::Players)) {
         const float beat = life == Life::Dying ? 0.5f + 0.5f * std::sin(time * 4.0f) : 0.5f;
         aliveBody = mixColor(IM_COL32(255, 244, 242, 255), IM_COL32(255, 228, 224, 255), beat);
     }
     const ImU32 body = mixColor(aliveBody, IM_COL32(241, 241, 238, 255), deadK);
-    dl->AddRectFilled(p, pEnd, body, round);
+    fillCardShape(dl, p, pEnd, round, enemy, body);
     // Flash on impact, colored by what happened (stronger on a crit).
     if (st.active) {
         const float dur = st.crit ? 0.40f : 0.14f;
@@ -448,22 +503,22 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
             if (st.fxKind == FxKind::Heal) flash = IM_COL32(60, 200, 100, 255);
             if (st.fxKind == FxKind::Temp) flash = IM_COL32(40, 160, 240, 255);
             if (st.fxKind == FxKind::Immune) flash = IM_COL32(150, 150, 160, 255);
-            dl->AddRectFilled(p, pEnd, withAlpha(flash, static_cast<int>((st.crit ? 110 : 55) * k)), round);
+            fillCardShape(dl, p, pEnd, round, enemy, withAlpha(flash, static_cast<int>((st.crit ? 110 : 55) * k)));
         }
     }
     // A strip of the card's color down its left edge: the card's own rounded shape,
     // clipped to its first few pixels, so the strip follows the corners. (A narrow
     // rect can't take the card's corner radius and would poke out of the outline.)
     dl->PushClipRect(p, ImVec2(p.x + 6 * S, pEnd.y), true);
-    dl->AddRectFilled(p, pEnd, fadeAlpha(accent, 0.85f), round);
+    fillCardShape(dl, p, pEnd, round, enemy, fadeAlpha(accent, 0.85f));
     dl->PopClipRect();
-    dl->AddRect(p, pEnd, outlineCol, round, 0, outline);
+    strokeCardShape(dl, p, pEnd, round, enemy, outlineCol, outline);
 
     // Left: icon tile with a line glyph in the side's color.
     const float iconSize = 32 * S;
     const ImVec2 iconMin(p.x + pad + 4 * S, p.y + (size.y - iconSize) * 0.5f);
     const ImVec2 iconMax(iconMin.x + iconSize, iconMin.y + iconSize);
-    dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, 30), 9 * S);
+    dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, onDark ? 64 : 30), 9 * S);
     const ImVec2 glyphOrigin(iconMin.x + iconSize * 0.15f, iconMin.y + iconSize * 0.15f);
     const float glyphSize = iconSize * 0.7f;
     // On death the heart/bolt fades out while a cross is drawn over it stroke by stroke.
@@ -507,8 +562,8 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
         const float wRest = ImGui::CalcTextSize(rest.c_str()).x;
         const float wTemp = tempText.empty() ? 0.0f : ImGui::CalcTextSize(tempText.c_str()).x;
         hpLeft = rightLimit - (wCur + wRest + wTemp);
-        heavyText(dl, ImVec2(hpLeft, line1Y), mixColor(COL_TEXT, COL_MUTED, deadK), cur.c_str());
-        dl->AddText(ImVec2(hpLeft + wCur, line1Y), COL_MUTED, rest.c_str());
+        heavyText(dl, ImVec2(hpLeft, line1Y), textCol, cur.c_str());
+        dl->AddText(ImVec2(hpLeft + wCur, line1Y), mutedCol, rest.c_str());
         if (!tempText.empty()) dl->AddText(ImVec2(hpLeft + wCur + wRest, line1Y), COL_TEMP, tempText.c_str());
     }
 
@@ -518,7 +573,7 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
     const float nameRight = std::max(textX + 20 * S, hpLeft - 8 * S);
     const ImVec2 ns = heavyTextSize(name.c_str(), nameDraw);
     dl->PushClipRect(ImVec2(textX, p.y), ImVec2(nameRight, pEnd.y), true);
-    heavyText(dl, ImVec2(textX, line1Y), mixColor(COL_TEXT, COL_MUTED, deadK), name.c_str(), nameDraw);
+    heavyText(dl, ImVec2(textX, line1Y), textCol, name.c_str(), nameDraw);
     dl->PopClipRect();
     if (showDead) {
         // The strike-through is drawn left to right, just after the cross.
@@ -575,7 +630,8 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
         const ImVec2 barMax(barEnd, line2Y + barH);
         const BarVis bar = computeBar(st, c.getCurrentHp(), c.getMaxHp());
         const float barW = barMax.x - barMin.x;
-        dl->AddRectFilled(barMin, barMax, COL_TRACK, barRound);
+        const ImU32 track = enemy ? mixColor(mixColor(body, COL_WHITE, 0.16f), COL_TRACK, deadK) : COL_TRACK;
+        dl->AddRectFilled(barMin, barMax, track, barRound);
         dl->PushClipRect(barMin, barMax, true);
         if (bar.fillEnd > 0.0f) {
             const float targetFrac = c.getMaxHp() > 0
@@ -599,7 +655,7 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
         dl->AddRect(barMin, barMax, showDead ? COL_BORDER_HI : COL_INK, barRound, 0, 1.25f * S);
     }
     if (!chips.empty() && chipsX + 30 * S < rightLimit) {
-        drawChips(dl, ImVec2(chipsX, line2Y + barH * 0.5f - 8.0f * S), rightLimit, chips, S, 0.84f);
+        drawChips(dl, ImVec2(chipsX, line2Y + barH * 0.5f - 8.0f * S), rightLimit, chips, S, 0.84f, onDark);
     }
     (void)lineH;
 
@@ -685,6 +741,10 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
     const float time = static_cast<float>(ImGui::GetTime());
     const float lineH = ImGui::GetTextLineHeight();
     const ImU32 accent = dead ? COL_GRAY : creatureColor(side, c);
+    // A living enemy is shown in the enemy look (its box is drawn by drawSpotlightBox).
+    const bool onDark = side == Side::Creatures && !dead;
+    const ImU32 textCol = dead ? COL_MUTED : (onDark ? COL_ON_DARK : COL_TEXT);
+    const ImU32 mutedCol = onDark ? COL_ON_DARK_MUTED : COL_MUTED;
     const float x0 = a.x + pad, x1 = b.x - pad;
     float y = a.y + pad;
 
@@ -695,7 +755,7 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
     {
         const float icon = 46 * S;
         const ImVec2 iconMin(x0, y), iconMax(x0 + icon, y + icon);
-        dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, 30), 12 * S);
+        dl->AddRectFilled(iconMin, iconMax, withAlpha(accent, onDark ? 64 : 30), 12 * S);
         const ImVec2 go(iconMin.x + icon * 0.15f, iconMin.y + icon * 0.15f);
         if (dead) drawCross(dl, go, icon * 0.7f, 2.8f * S, accent);
         else drawCreatureIcon(dl, side, c, go, icon * 0.7f, 2.8f * S, accent);
@@ -710,17 +770,19 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
             const ImVec2 tw = boldTextSize("TURN", 0.85f);
             const float ph = 24 * S, pw = tw.x + 34 * S;
             const ImVec2 p0(x1 - pw, y + 2 * S), p1(x1, y + 2 * S + ph);
-            dl->AddRectFilled(p0, p1, COL_INK, ph * 0.5f);
+            // Black on a white panel, white on a dark one.
+            const ImU32 pillFill = onDark ? COL_WHITE : COL_INK, pillText = onDark ? COL_INK : COL_WHITE;
+            dl->AddRectFilled(p0, p1, pillFill, ph * 0.5f);
             const float mid = (p0.y + p1.y) * 0.5f, tx = p0.x + 11 * S;
-            dl->AddTriangleFilled(ImVec2(tx, mid - 4.5f * S), ImVec2(tx, mid + 4.5f * S), ImVec2(tx + 8 * S, mid), COL_WHITE);
-            boldText(dl, ImVec2(tx + 13 * S, mid - tw.y * 0.5f), COL_WHITE, "TURN", 0.85f);
+            dl->AddTriangleFilled(ImVec2(tx, mid - 4.5f * S), ImVec2(tx, mid + 4.5f * S), ImVec2(tx + 8 * S, mid), pillText);
+            boldText(dl, ImVec2(tx + 13 * S, mid - tw.y * 0.5f), pillText, "TURN", 0.85f);
             nameRight = p0.x - 10 * S;
         }
         const float nx = iconMax.x + 14 * S;
         dl->PushClipRect(ImVec2(nx, a.y), ImVec2(nameRight, b.y), true);
-        heavyText(dl, ImVec2(nx, y - 1 * S), dead ? COL_MUTED : COL_TEXT, c.getName().c_str(), 1.45f);
+        heavyText(dl, ImVec2(nx, y - 1 * S), textCol, c.getName().c_str(), 1.45f);
         dl->PopClipRect();
-        dl->AddText(ImVec2(nx, y + icon - lineH - 1 * S), COL_MUTED, what.c_str());
+        dl->AddText(ImVec2(nx, y + icon - lineH - 1 * S), mutedCol, what.c_str());
         y += icon + 16 * S;
     }
 
@@ -729,9 +791,9 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
         const std::string cur = std::to_string(c.getCurrentHp());
         const std::string rest = " / " + std::to_string(c.getMaxHp()) + " HP";
         const ImVec2 cs = heavyTextSize(cur.c_str(), 2.0f);
-        heavyText(dl, ImVec2(x0, y), dead ? COL_MUTED : COL_TEXT, cur.c_str(), 2.0f);
+        heavyText(dl, ImVec2(x0, y), textCol, cur.c_str(), 2.0f);
         const float restY = y + cs.y - lineH * 1.15f;
-        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.15f, ImVec2(x0 + cs.x + 4 * S, restY), COL_MUTED, rest.c_str());
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.15f, ImVec2(x0 + cs.x + 4 * S, restY), mutedCol, rest.c_str());
         if (c.getTempHp() > 0) {
             const std::string temp = "+" + std::to_string(c.getTempHp()) + " temp";
             const ImVec2 rs = sizedTextSize(rest.c_str(), 1.15f);
@@ -743,7 +805,7 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
         const ImVec2 barMin(x0, y), barMax(x1, y + barH);
         const float barW = barMax.x - barMin.x;
         const BarVis bar = computeBar(st, c.getCurrentHp(), c.getMaxHp());
-        dl->AddRectFilled(barMin, barMax, COL_TRACK, barH * 0.5f);
+        dl->AddRectFilled(barMin, barMax, onDark ? mixColor(enemyBody(accent), COL_WHITE, 0.16f) : COL_TRACK, barH * 0.5f);
         dl->PushClipRect(barMin, barMax, true);
         if (bar.fillEnd > 0.0f) {
             const float frac = c.getMaxHp() > 0 ? static_cast<float>(c.getCurrentHp()) / static_cast<float>(c.getMaxHp()) : 0.0f;
@@ -776,7 +838,7 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
                     std::to_string(c.getPassivePerception());
             if (c.getDamageMod() != DamageMod::Normal) stats += std::string("  \xC2\xB7  ") + damageModName(c.getDamageMod());
         }
-        dl->AddText(ImVec2(x0, y), COL_MUTED, stats.c_str());
+        dl->AddText(ImVec2(x0, y), mutedCol, stats.c_str());
         y += lineH + 14 * S;
     }
 
@@ -835,14 +897,30 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
     {
         const std::vector<Chip> chips = cardChips(side, c, life, time);
         if (!chips.empty()) {
-            drawChips(dl, ImVec2(x0, y), x1, chips, S);
+            drawChips(dl, ImVec2(x0, y), x1, chips, S, 1.0f, onDark);
             y += 19 * S + 12 * S;
         }
         if (!c.getNotes().empty()) {
-            dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(x0, y), COL_MUTED, c.getNotes().c_str(), nullptr, x1 - x0);
+            dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(x0, y), mutedCol, c.getNotes().c_str(), nullptr, x1 - x0);
         }
     }
 
     ImGui::PopClipRect();
     ImGui::PopID();
+}
+
+void drawSpotlightBox(ImVec2 a, ImVec2 b, const Encounter& encounter, const CardRef* ref, float S) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const Creature* c = ref ? encounter.at(ref->side, ref->index) : nullptr;
+    const bool enemyLook = c && ref->side == Side::Creatures && lifeOf(ref->side, *c) != Life::Dead;
+    if (!enemyLook) {
+        inkBox(dl, a, b, 18 * S, S, COL_PANEL, 3.0f);
+        return;
+    }
+    // Same as inkBox (hard shadow, fill, ink outline), with cut corners and the enemy's dark tint.
+    const float cut = 18 * S;
+    const ImVec2 off(3.0f * S, 3.6f * S);
+    fillCardShape(dl, a + off, b + off, cut, true, COL_INK);
+    fillCardShape(dl, a, b, cut, true, enemyBody(creatureColor(ref->side, *c)));
+    strokeCardShape(dl, a, b, cut, true, COL_INK, 1.75f * S);
 }

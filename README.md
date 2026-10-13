@@ -1,6 +1,6 @@
 # DnD HP Tracker
 
-> ### ⬇ Download — version 2.1.1
+> ### ⬇ Download — version 2.2
 > **[Windows](Downloads/Windows/)** (10 or 11) · **[Mac](Downloads/Mac/)** (Apple Silicon, M1 or newer)
 >
 > Each link opens a page with the download and how to open the app the first time.
@@ -101,7 +101,8 @@ Each card in the lists is a compact row:
 
 | Part | Meaning |
 |---|---|
-| Icon tile | Blue heart = player, red bolt = enemy, gray X = dead |
+| The card itself | **Players** are white cards with round corners. **Enemies** are dark cards, tinted with their color, with cut corners, so they stand apart even when a player picks red. Defeated cards turn light gray (enemies keep their cut corners) |
+| Icon tile | Blue heart = player, red bolt = enemy (or the icon and color picked for it), gray X = dead |
 | Name | Struck through when dead |
 | `35 / 40 +5` | Current / max HP, and temporary HP in blue |
 | HP bar | Green above 50%, amber above 25%, red below |
@@ -109,7 +110,7 @@ Each card in the lists is a compact row:
 | Chips next to the bar | Status at a glance (see below) |
 | **-** / **+** | Damage / heal this creature by the current amount |
 
-Click a card to see it in the **spotlight**, which shows everything at full size:
+Click a card to see it in the **spotlight** (dark, like the card, for a living enemy), which shows everything at full size:
 big HP and bar, AC, speed and passive Perception, resistances, CR and XP or level,
 death saves, all its chips, notes, and buttons for **Damage**, **Heal**, **+temp HP**
 and **Edit...**.

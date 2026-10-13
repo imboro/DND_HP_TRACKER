@@ -46,5 +46,9 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
 void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 a, ImVec2 b,
                    const std::string& amountLabel, bool holdsTurn, const CardActions& act);
 
+// The spotlight panel's box, drawn behind the cards: white, or the enemy look (dark,
+// tinted, cut corners) when `ref` is a living enemy. `ref` may be null (setup panel).
+void drawSpotlightBox(ImVec2 a, ImVec2 b, const Encounter& encounter, const CardRef* ref, float S);
+
 // Floating label and crit starburst; drawn in a top pass above all cards.
 void drawCardEffects(const CardState& st, ImVec2 size, float S);
