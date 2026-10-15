@@ -293,6 +293,13 @@
                 act(3, [&]() { check(exists("Zed") && zIndex("Zed") == 1 && CS("Zed").selected, "New character creates the card at the chosen slot"); });
                 act(70, [&]() { g_scrollTo = "End combat"; board.clearSelection(); motion(g_boardOrigin.x + g_boardSize.x - 60 * s, g_boardOrigin.y + g_boardSize.y * 0.5f); });
                 act(1, [&]() { g_shot = "18_final"; });
+                // The card buttons' − and + stay centered at the smallest card size too.
+                act(2, [&]() { g_cardScale = 0.6f; });
+                act(12, [&]() { g_shot = "18b_small_cards";
+                                const CardState& st = CS("Aria");
+                                check(std::fabs(st.damageCenter.x - (st.healCenter.x - 26 * s * 0.6f - 6 * s * 0.6f)) < 1.0f,
+                                      "at 60% card size the damage and heal buttons keep their layout"); });
+                act(2, [&]() { g_cardScale = 1.0f; });
                 clickAt([=]() { return rectCenter("End combat"); });
                 act(20, [&]() { check(!board.inCombat && encounter.getCreatures().empty() && exists("Aria") && exists("Dax") && C("Dax")->getCurrentHp() == 0,
                                       "End combat: enemies leave, the party stays as it is, back to setup"); g_scrollTo.clear(); });

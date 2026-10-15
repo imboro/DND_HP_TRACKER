@@ -539,13 +539,23 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
     st.damageCenter = ImVec2(dmgMin.x + btn * 0.5f, dmgMin.y + btn * 0.5f);
     st.healCenter = ImVec2(healMin.x + btn * 0.5f, healMin.y + btn * 0.5f);
     // Covered cards only draw their buttons (no ImGui item), so they can't
-    // steal the press from the card in front.
+    // steal the press from the card in front. The buttons have no text label: the
+    // − and + are drawn as strokes, so they stay centered at every card size (ImGui
+    // centers a label inside fixed padding, which a small button doesn't have room for).
+    auto sign = [&](ImVec2 min, bool plus, ImU32 col) {
+        const ImVec2 c(min.x + btn * 0.5f, min.y + btn * 0.5f);
+        const float h = btn * 0.2f, t = std::max(1.5f, 2.0f * S);
+        dl->AddLine(ImVec2(c.x - h, c.y), ImVec2(c.x + h, c.y), col, t);
+        if (plus) dl->AddLine(ImVec2(c.x, c.y - h), ImVec2(c.x, c.y + h), col, t);
+    };
     ImGui::SetCursorScreenPos(dmgMin);
-    if (flatButton("-##dmg", ImVec2(btn, btn), BTN_RED, true, interactive)) act.damage(ref);
+    if (flatButton("##dmg", ImVec2(btn, btn), BTN_RED, true, interactive)) act.damage(ref);
     if (interactive && ImGui::IsItemHovered()) ImGui::SetTooltip("Damage %s", amountLabel.c_str());
+    sign(dmgMin, false, BTN_RED.text);
     ImGui::SetCursorScreenPos(healMin);
-    if (flatButton("+##heal", ImVec2(btn, btn), BTN_GREEN, true, interactive)) act.heal(ref);
+    if (flatButton("##heal", ImVec2(btn, btn), BTN_GREEN, true, interactive)) act.heal(ref);
     if (interactive && ImGui::IsItemHovered()) ImGui::SetTooltip("Heal %s", amountLabel.c_str());
+    sign(healMin, true, BTN_GREEN.text);
 
     const float lineH = ImGui::GetTextLineHeight();
     const float textX = iconMax.x + 9 * S;
