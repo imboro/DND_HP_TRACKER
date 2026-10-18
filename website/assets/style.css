@@ -37,6 +37,9 @@
 }
 
 * { box-sizing: border-box; }
+/* Backgrounds stay inside borders: otherwise Chrome lets a white fill bleed through the
+   antialiased curve of a dark rounded border (light specks at the corners). */
+.panel, .box, .btn, .seg, .card .mini, .ticks li::before, .faq summary::after, .shot img { background-clip: padding-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 84px; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition: none !important; animation: none !important; } }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
@@ -57,7 +60,10 @@ p { margin: 0; }
 .panel { background: var(--panel); border: 2px solid var(--ink); border-radius: var(--r-panel); box-shadow: var(--shadow); }
 .box { position: relative; background: var(--panel); border: 2px solid var(--ink); border-radius: var(--r-box); box-shadow: 3px 4px 0 var(--ink); padding: 26px 20px 20px; }
 /* The heavy title sits in a gap of the box's top edge, like the app's sections. */
-.box-title { position: absolute; top: 0; left: 16px; max-width: calc(100% - 32px); transform: translateY(-55%); background: var(--panel); padding: 0 8px; font-size: 1.02rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.box-title { position: absolute; top: 0; left: 16px; max-width: calc(100% - 32px); transform: translateY(-55%);
+  /* White only from the box's top edge down: it cuts a gap in the border line without
+     covering the page above the box. The edge sits at 55% of the title's height. */
+  background: linear-gradient(to bottom, transparent calc(55% - 1px), var(--panel) calc(55% - 1px)); padding: 0 8px; font-size: 1.02rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 10px 22px; border: 2px solid var(--ink); border-radius: 14px; background: var(--panel); color: var(--ink); font: 700 1rem/1.2 var(--body); text-decoration: none; cursor: pointer; box-shadow: 0 3px 0 var(--ink); transition: transform 0.08s, box-shadow 0.08s, background 0.15s; }
 .btn:hover { background: var(--raised-hi); }
