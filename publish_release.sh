@@ -39,6 +39,9 @@ if [ ! -d "$SITE_DIR/.git" ]; then
     rm -rf "$SITE_DIR"
     gh repo clone "$PUBLIC" "$SITE_DIR"
 fi
+# Public commits carry GitHub's private noreply address, never a personal email.
+git -C "$SITE_DIR" config user.name "$(git config user.name)"
+git -C "$SITE_DIR" config user.email "$(git config user.email)"
 git -C "$SITE_DIR" pull --quiet --ff-only || true
 find "$SITE_DIR" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 cp -R website/. "$SITE_DIR/"
