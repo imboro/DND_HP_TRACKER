@@ -58,12 +58,14 @@ p { margin: 0; }
 
 /* ---- Panels, boxes, buttons (inkBox, beginSection, flatButton) ---- */
 .panel { background: var(--panel); border: 2px solid var(--ink); border-radius: var(--r-panel); box-shadow: var(--shadow); }
-.box { position: relative; background: var(--panel); border: 2px solid var(--ink); border-radius: var(--r-box); box-shadow: 3px 4px 0 var(--ink); padding: 26px 20px 20px; }
+.box { position: relative; background: var(--panel); border: 2px solid var(--ink); border-radius: var(--r-box); box-shadow: 3px 4px 0 var(--ink); padding: 30px 20px 20px; }
 /* The heavy title sits in a gap of the box's top edge, like the app's sections. */
-.box-title { position: absolute; top: 0; left: 16px; max-width: calc(100% - 32px); transform: translateY(-55%);
-  /* White only from the box's top edge down: it cuts a gap in the border line without
-     covering the page above the box. The edge sits at 55% of the title's height. */
-  background: linear-gradient(to bottom, transparent calc(55% - 1px), var(--panel) calc(55% - 1px)); padding: 0 8px; font-size: 1.02rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The heavy title is a small label of its own (white, ink outline, hard shadow), sitting
+   on the box's top edge, like the app's TURN tab: nothing shows through it. */
+.box-title { position: absolute; top: 0; left: 14px; max-width: calc(100% - 28px); transform: translateY(-50%);
+  background: var(--panel); background-clip: padding-box; border: 2px solid var(--ink); border-radius: 10px;
+  box-shadow: 2px 2px 0 var(--ink); padding: 3px 10px 4px; font-size: 1rem; line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 10px 22px; border: 2px solid var(--ink); border-radius: 14px; background: var(--panel); color: var(--ink); font: 700 1rem/1.2 var(--body); text-decoration: none; cursor: pointer; box-shadow: 0 3px 0 var(--ink); transition: transform 0.08s, box-shadow 0.08s, background 0.15s; }
 .btn:hover { background: var(--raised-hi); }
@@ -75,7 +77,7 @@ p { margin: 0; }
 .btn .size { font-weight: 400; opacity: 0.75; }
 
 /* ---- Top bar ---- */
-.topbar { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-bottom: 2px solid var(--ink); padding-top: env(safe-area-inset-top, 0px); }
+.topbar { position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 2px solid var(--ink); padding-top: env(safe-area-inset-top, 0px); }
 .topbar-in { max-width: 1180px; margin: 0 auto; padding: 10px var(--gutter); display: flex; align-items: center; gap: 20px; }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--heavy); font-weight: 900; font-size: 1.25rem; letter-spacing: -0.01em; }
 .nav { display: flex; gap: 6px; margin-left: auto; }
@@ -191,7 +193,7 @@ p { margin: 0; }
 .downloads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
 @media (max-width: 760px) { .downloads { grid-template-columns: 1fr; } }
 .dl-card { display: grid; gap: 16px; align-content: start; padding: 30px 22px 22px; }
-.dl-card .box-title { font-size: 1.3rem; }
+.dl-card .box-title { font-size: 1.2rem; }
 .dl-card.suggested { box-shadow: 0 0 0 4px var(--select), 5px 6px 0 4px var(--ink); }
 .req { color: var(--muted); font-weight: 700; }
 .steps { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; font-size: 0.95rem; }
