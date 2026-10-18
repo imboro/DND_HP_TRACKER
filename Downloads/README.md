@@ -1,6 +1,6 @@
 # Download HP Tracker
 
-**Version 2.2.1** · 15 October 2026
+**Version 2.2.1** · 18 October 2026
 
 Pick your computer. Each link downloads a zip; the page next to it explains how to
 open the app the first time.
