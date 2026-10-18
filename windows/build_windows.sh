@@ -6,7 +6,7 @@
 #
 #   windows/deps/   the llvm-mingw compiler and SDL2 for Windows (downloaded once)
 #   windows/build/  CMake build tree
-#   windows/dist/   "DnD HP Tracker/" (exe + SDL2.dll + README.txt) and a zip
+#   windows/dist/   "HP Tracker/" (exe + SDL2.dll + README.txt) and a zip
 #
 # Needs: cmake (brew install cmake). Everything else is downloaded.
 set -euo pipefail
@@ -60,16 +60,17 @@ cmake -S "$ROOT" -B "$BUILD" \
     -DSDL2_DIR="$SDL_PREFIX/lib/cmake/SDL2"
 cmake --build "$BUILD" -j 8
 
-# 4) Package: the exe, SDL2.dll beside it, and a short read-me.
-APPDIR="$DIST/DnD HP Tracker"
+# 4) Package: the exe, SDL2.dll beside it, a short read-me and the credits / licenses.
+APPDIR="$DIST/HP Tracker"
 rm -rf "$DIST"
 mkdir -p "$APPDIR"
-cp "$BUILD/DnD HP Tracker.exe" "$APPDIR/"
+cp "$BUILD/HP Tracker.exe" "$APPDIR/"
 cp "$SDL_PREFIX/bin/SDL2.dll" "$APPDIR/"
 cp "$HERE/README.txt" "$APPDIR/README.txt"
-(cd "$DIST" && zip -qr "DnD-HP-Tracker-windows.zip" "DnD HP Tracker")
+cp "$ROOT/legal/CREDITS.txt" "$APPDIR/CREDITS.txt"
+(cd "$DIST" && zip -qr "HP-Tracker-windows.zip" "HP Tracker")
 
 echo
 echo "Done:"
-echo "  windows/dist/DnD HP Tracker/"
-echo "  windows/dist/DnD-HP-Tracker-windows.zip"
+echo "  windows/dist/HP Tracker/"
+echo "  windows/dist/HP-Tracker-windows.zip"

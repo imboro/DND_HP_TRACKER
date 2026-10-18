@@ -1,6 +1,6 @@
-# DnD HP Tracker for Windows
+# HP Tracker for Windows
 
-**[⬇ Download DnD-HP-Tracker-Windows.zip](https://github.com/imboro/DND_HP_TRACKER/raw/main/Downloads/Windows/DnD-HP-Tracker-Windows.zip)**
+**[⬇ Download HP-Tracker-Windows.zip](https://github.com/imboro/DND_HP_TRACKER/raw/main/Downloads/Windows/HP-Tracker-Windows.zip)**
 
 For Windows 10 and 11 (64-bit). Nothing to install.
 
@@ -8,7 +8,7 @@ For Windows 10 and 11 (64-bit). Nothing to install.
 
 1. Download the zip (link above) and **unzip it**: right-click it > **Extract All...**.
    Running it from inside the zip won't work.
-2. Open the extracted folder and double-click **`DnD HP Tracker.exe`**.
+2. Open the extracted folder and double-click **`HP Tracker.exe`**.
    Keep `SDL2.dll` in the same folder; the app needs it.
 3. The first time, Windows may show **"Windows protected your PC"**. That's because
    the app isn't signed by a paid developer account. Click **More info**, then

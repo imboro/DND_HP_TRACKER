@@ -5,8 +5,8 @@
 #   ./make_downloads.sh
 #
 #   Downloads/README.md                       which one to download (version, date)
-#   Downloads/Windows/DnD-HP-Tracker-Windows.zip
-#   Downloads/Mac/DnD-HP-Tracker-Mac.zip
+#   Downloads/Windows/HP-Tracker-Windows.zip
+#   Downloads/Mac/HP-Tracker-Mac.zip
 #   README.md                                 the version in its download box
 #
 # The version comes from project(... VERSION x.y ...) in CMakeLists.txt.
@@ -14,7 +14,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION=$(sed -nE 's/^project\(DnDHpTracker VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+VERSION=$(sed -nE 's/^project\(HpTracker VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
 DATE=$(date +"%-d %B %Y")
 [ -n "$VERSION" ] || { echo "No version found in CMakeLists.txt"; exit 1; }
 
@@ -23,14 +23,14 @@ DATE=$(date +"%-d %B %Y")
 
 mkdir -p Downloads/Windows Downloads/Mac
 rm -f Downloads/Windows/*.zip Downloads/Mac/*.zip
-cp windows/dist/DnD-HP-Tracker-windows.zip Downloads/Windows/DnD-HP-Tracker-Windows.zip
-cp dist/DnD-HP-Tracker-mac.zip Downloads/Mac/DnD-HP-Tracker-Mac.zip
+cp windows/dist/HP-Tracker-windows.zip Downloads/Windows/HP-Tracker-Windows.zip
+cp dist/HP-Tracker-mac.zip Downloads/Mac/HP-Tracker-Mac.zip
 
-WIN_MB=$(du -k Downloads/Windows/DnD-HP-Tracker-Windows.zip | awk '{printf "%.1f", $1 / 1024}')
-MAC_MB=$(du -k Downloads/Mac/DnD-HP-Tracker-Mac.zip | awk '{printf "%.1f", $1 / 1024}')
+WIN_MB=$(du -k Downloads/Windows/HP-Tracker-Windows.zip | awk '{printf "%.1f", $1 / 1024}')
+MAC_MB=$(du -k Downloads/Mac/HP-Tracker-Mac.zip | awk '{printf "%.1f", $1 / 1024}')
 
 cat > Downloads/README.md <<EOF
-# Download DnD HP Tracker
+# Download HP Tracker
 
 **Version $VERSION** · $DATE
 
@@ -39,8 +39,8 @@ open the app the first time.
 
 | Your computer | Download | How to open it |
 |---|---|---|
-| **Windows** 10 or 11 | [⬇ DnD-HP-Tracker-Windows.zip](https://github.com/imboro/DND_HP_TRACKER/raw/main/Downloads/Windows/DnD-HP-Tracker-Windows.zip) ($WIN_MB MB) | [Windows guide](Windows/) |
-| **Mac** with Apple Silicon (M1 or newer) | [⬇ DnD-HP-Tracker-Mac.zip](https://github.com/imboro/DND_HP_TRACKER/raw/main/Downloads/Mac/DnD-HP-Tracker-Mac.zip) ($MAC_MB MB) | [Mac guide](Mac/) |
+| **Windows** 10 or 11 | [⬇ HP-Tracker-Windows.zip](https://github.com/imboro/DND_HP_TRACKER/raw/main/Downloads/Windows/HP-Tracker-Windows.zip) ($WIN_MB MB) | [Windows guide](Windows/) |
+| **Mac** with Apple Silicon (M1 or newer) | [⬇ HP-Tracker-Mac.zip](https://github.com/imboro/DND_HP_TRACKER/raw/main/Downloads/Mac/HP-Tracker-Mac.zip) ($MAC_MB MB) | [Mac guide](Mac/) |
 
 Nothing to install: unzip and open. The app isn't signed by a paid developer
 account, so the first time Windows or macOS asks you to confirm; the guides show how.

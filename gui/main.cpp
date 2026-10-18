@@ -1,4 +1,4 @@
-// DnD HP Tracker: opens the window, sets up ImGui, and hands over to App.
+// HP Tracker: opens the window, sets up ImGui, and hands over to App.
 #include <SDL.h>
 
 #include <algorithm>
@@ -21,7 +21,7 @@ int main(int, char**) {
         return 1;
     }
 
-    SDL_Window* window = SDL_CreateWindow("DnD HP Tracker", SDL_WINDOWPOS_CENTERED,
+    SDL_Window* window = SDL_CreateWindow("HP Tracker", SDL_WINDOWPOS_CENTERED,
                                           SDL_WINDOWPOS_CENTERED, 1360, 900,
                                           SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     SDL_Renderer* renderer = SDL_CreateRenderer(

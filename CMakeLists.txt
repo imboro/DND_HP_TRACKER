@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 # The app version: shown in the Mac app and on the downloads (make_downloads.sh).
-project(DnDHpTracker VERSION 2.2.1 LANGUAGES CXX)
+project(HpTracker VERSION 2.2.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(SDL2 REQUIRED)
 
-# core/: the D&D rules (no UI). gui/: the window, built on top of core.
+# core/: the 5e rules (no UI). gui/: the window, built on top of core.
 set(LOGIC_SOURCES core/creature.cpp core/encounter.cpp core/difficulty.cpp)
 include_directories(core)
 
@@ -56,7 +56,7 @@ if(WIN32)
     target_link_libraries(hp_tracker_gui PRIVATE SDL2::SDL2main SDL2::SDL2 ws2_32)
     # cpp-httplib needs the Windows 10 API.
     target_compile_definitions(hp_tracker_gui PRIVATE _WIN32_WINNT=0x0A00)
-    set_target_properties(hp_tracker_gui PROPERTIES WIN32_EXECUTABLE TRUE OUTPUT_NAME "DnD HP Tracker")
+    set_target_properties(hp_tracker_gui PROPERTIES WIN32_EXECUTABLE TRUE OUTPUT_NAME "HP Tracker")
     # The app icon (windows/icon/hptracker.ico) is compiled in as a resource.
     enable_language(RC)
     set(APP_ICON ${CMAKE_SOURCE_DIR}/windows/icon/hptracker.ico)
@@ -79,17 +79,17 @@ if(MINGW)
 endif()
 
 # ---- macOS app bundle ------------------------------------------------------
-# `cmake --install build --prefix dist` produces dist/"DnD HP Tracker.app".
+# `cmake --install build --prefix dist` produces dist/"HP Tracker.app".
 # Run ./package_mac.sh to also copy SDL inside it and make a shareable zip.
 if(APPLE)
     set_target_properties(hp_tracker_gui PROPERTIES
         MACOSX_BUNDLE TRUE
-        OUTPUT_NAME "DnD HP Tracker"
-        MACOSX_BUNDLE_BUNDLE_NAME "DnD HP Tracker"
+        OUTPUT_NAME "HP Tracker"
+        MACOSX_BUNDLE_BUNDLE_NAME "HP Tracker"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.hotelworkshop.hptracker"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
-        MACOSX_BUNDLE_INFO_STRING "DnD HP Tracker"
+        MACOSX_BUNDLE_INFO_STRING "HP Tracker"
         MACOSX_BUNDLE_COPYRIGHT ""
         MACOSX_BUNDLE_ICON_FILE "hptracker.icns"
     )
@@ -97,6 +97,10 @@ if(APPLE)
     set(APP_ICNS ${CMAKE_SOURCE_DIR}/macos/icon/hptracker.icns)
     set_source_files_properties(${APP_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
     target_sources(hp_tracker_gui PRIVATE ${APP_ICNS})
+    # Credits (SRD 5.1 attribution, licenses): Credits.html shows in the About window.
+    set(APP_CREDITS ${CMAKE_SOURCE_DIR}/legal/Credits.html ${CMAKE_SOURCE_DIR}/legal/CREDITS.txt)
+    set_source_files_properties(${APP_CREDITS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(hp_tracker_gui PRIVATE ${APP_CREDITS})
     # High-DPI rendering on Retina.
     set(MACOSX_BUNDLE_HIGH_RESOLUTION_CAPABLE TRUE)
 

@@ -1,12 +1,13 @@
-# DnD HP Tracker
+# HP Tracker
 
 > ### ⬇ Download — version 2.2.1
 > **[Windows](Downloads/Windows/)** (10 or 11) · **[Mac](Downloads/Mac/)** (Apple Silicon, M1 or newer)
 >
 > Each link opens a page with the download and how to open the app the first time.
+> Public website (for anyone, no GitHub account): https://imboro.github.io/hp-tracker/
 > All versions: the [Downloads](Downloads/) folder.
 
-A combat tracker for Dungeons & Dragons 5e Dungeon Masters. Set up the party and
+A combat tracker for game masters running fifth edition (5e) games. Set up the party and
 the monsters as cards in a **turn order** you arrange by hand, press **Start
 combat**, and pass the turn with one click; rounds count themselves. The tracker
 handles hit points, temporary HP, resistances, conditions, concentration checks,
@@ -45,7 +46,7 @@ agreed on, and the tracker follows it.
 
 ## Quick start
 
-1. Open **DnD HP Tracker.app**. The first time on a new Mac, right-click it and choose
+1. Open **HP Tracker.app**. The first time on a new Mac, right-click it and choose
    **Open**, because the app isn't signed by a paid Apple developer account.
 2. On first launch you get a sample Hero, Goblin and Orc. Delete them with a right-click
    > **Delete** (or select them and press Delete), or use **New encounter > Remove everything**.
@@ -331,7 +332,7 @@ combined HP, and a **difficulty pill**: *Trivial / Easy / Medium / Hard / Deadly
 plus the adjusted XP. Hover the pill to see the party's thresholds, the
 multiplier, and the XP award per player.
 
-It uses the **D&D 5e Dungeon Master's Guide (2014)** method: XP thresholds by
+It uses the standard **5e encounter-building** method: XP thresholds by
 character level, and a multiplier for the number of monsters adjusted for party
 size. It needs **player levels** and **monster CRs**. Creatures without a CR are
 left out.
@@ -498,7 +499,7 @@ included in `third_party/imgui`.
 ```
 cmake -S . -B build
 cmake --build build
-open "build/DnD HP Tracker.app"   # the tracker
+open "build/HP Tracker.app"   # the tracker
 ./build/logic_tests               # rules tests (damage, death saves, conditions, difficulty...)
 ./build/console_demo              # small console demo of the rules classes
 ```
@@ -513,10 +514,10 @@ push). The pieces it runs:
 ./package_mac.sh
 ```
 
-This creates `dist/DnD HP Tracker.app` and `dist/DnD-HP-Tracker-mac.zip` with SDL
+This creates `dist/HP Tracker.app` and `dist/HP-Tracker-mac.zip` with SDL
 bundled inside, so it runs on Macs without Homebrew. It's built for Apple Silicon
 (arm64). Recipients right-click > Open the first time, or run
-`xattr -cr "DnD HP Tracker.app"`.
+`xattr -cr "HP Tracker.app"`.
 
 **Windows version:** `windows/build_windows.sh` builds it on the Mac into
 `windows/dist/` (a folder with the `.exe` and `SDL2.dll`, plus a zip). See
@@ -531,7 +532,7 @@ writes screenshots to `build/ui_test/`.
 
 ## Project layout
 
-The code is in two layers. `core/` holds the D&D rules and knows nothing about
+The code is in two layers. `core/` holds the 5e rules and knows nothing about
 windows or drawing; `gui/` is the app built on top of it. The rules can be tested
 on their own (`tests/logic_tests.cpp`) and could be reused by another front end.
 
@@ -584,3 +585,25 @@ on their own (`tests/logic_tests.cpp`) and could be reused by another front end.
 | `tools/make_icons.py` | Regenerates the Mac and Windows icons from `hptracker_icon.png` |
 | `archive/` | Earlier versions kept for reference (the previous bright "neo-brutalist" theme, an old `encounter.cpp`) |
 | `docs/` | README screenshot |
+
+---
+
+## Credits and legal
+
+The public name is **HP Tracker**; the website and the public downloads live in
+[imboro/hp-tracker](https://github.com/imboro/hp-tracker) (`website/` here is its
+source, published with `./publish_release.sh`). `legal/CREDITS.txt` ships inside both
+apps (on the Mac it also shows in **About HP Tracker**).
+
+This work includes material taken from the System Reference Document 5.1 ("SRD 5.1")
+by Wizards of the Coast LLC and available at
+https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed
+under the Creative Commons Attribution 4.0 International License available at
+https://creativecommons.org/licenses/by/4.0/legalcode.
+
+HP Tracker is an independent, unofficial tool. It is not affiliated with, endorsed,
+sponsored, or approved by Wizards of the Coast LLC. Dungeons & Dragons and D&D are
+trademarks of Wizards of the Coast LLC.
+
+Libraries: Dear ImGui, cpp-httplib and QR Code generator (MIT), SDL (zlib). The
+website's font is Archivo (SIL Open Font License, `website/assets/fonts/OFL.txt`).

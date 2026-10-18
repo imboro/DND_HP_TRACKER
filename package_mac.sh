@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds a self-contained "DnD HP Tracker.app" (SDL libraries copied inside)
+# Builds a self-contained "HP Tracker.app" (SDL libraries copied inside)
 # and zips it, so it runs on Macs that don't have Homebrew or SDL installed.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -7,8 +7,8 @@ cd "$(dirname "$0")"
 # Use the Homebrew-in-home-directory install if present.
 export PATH="$HOME/homebrew/bin:$PATH"
 
-APP="dist/DnD HP Tracker.app"
-EXE="$APP/Contents/MacOS/DnD HP Tracker"
+APP="dist/HP Tracker.app"
+EXE="$APP/Contents/MacOS/HP Tracker"
 FW="$APP/Contents/Frameworks"
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -54,8 +54,8 @@ fi
 # Changing install names invalidates signatures; Apple Silicon needs one.
 codesign --force --deep --sign - "$APP"
 
-ditto -c -k --keepParent "$APP" "dist/DnD-HP-Tracker-mac.zip"
+ditto -c -k --keepParent "$APP" "dist/HP-Tracker-mac.zip"
 echo
 echo "Done:"
 echo "  $APP"
-echo "  dist/DnD-HP-Tracker-mac.zip"
+echo "  dist/HP-Tracker-mac.zip"

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HP Tracker</title>
+<meta name="description" content="A free combat tracker for 5e game masters: hit points, turn order, conditions, death saves and player screens on your phones. For Windows and Mac.">
+<meta property="og:title" content="HP Tracker">
+<meta property="og:description" content="A free combat tracker for 5e game masters, for Windows and Mac.">
+<meta property="og:image" content="assets/img/combat.jpg">
+<meta name="theme-color" content="#ecece8">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="preload" href="assets/fonts/archivo-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="#top" aria-label="HP Tracker home">
+      <img src="assets/icon.png" alt="" width="34" height="34">
+      <span>HP Tracker</span>
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#features" data-i18n="nav.features">Features</a>
+      <a href="#phones" data-i18n="nav.phones">Player screens</a>
+      <a href="#download" data-i18n="nav.download">Download</a>
+    </nav>
+    <div class="seg" role="group" aria-label="Language" id="lang">
+      <span class="seg-pill" aria-hidden="true"></span>
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="es" aria-pressed="false">ES</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ============ Hero ============ -->
+  <section class="hero wrap">
+    <div class="hero-copy">
+      <p class="eyebrow" data-i18n="hero.eyebrow">Free combat tracker for 5e</p>
+      <h1 data-i18n="hero.title">Keep the fight moving.</h1>
+      <p class="lead" data-i18n="hero.lead">HP Tracker keeps count of hit points, turns, conditions and death saves at your table, so you can keep your eyes on the players.</p>
+      <div class="cta">
+        <a class="btn btn-ink" id="ctaMain" href="#download" data-dl="mac"><span class="os-label" data-i18n="dl.mac">Download for Mac</span></a>
+        <a class="btn" id="ctaAlt" href="#download" data-dl="win"><span class="os-label" data-i18n="dl.win">Download for Windows</span></a>
+      </div>
+      <p class="meta"><span data-i18n="hero.free">Free</span> · <span data-i18n="hero.version">Version</span> <span class="js-version">2.2.1</span> · Windows 10/11 · <span data-i18n="hero.macreq">Mac with Apple Silicon</span></p>
+    </div>
+    <figure class="shot shot-hero">
+      <img src="assets/img/combat.jpg" width="1600" height="990" alt="HP Tracker in combat: the sidebar, the turn order with players and dark enemy cards, the spotlight on the player whose turn it is, and the Defeated column." data-i18n-alt="alt.combat">
+    </figure>
+  </section>
+
+  <!-- ============ Statement + demo ============ -->
+  <section class="statement wrap">
+    <div class="statement-copy">
+      <h2 data-i18n="st.title">It doesn't replace the table. It keeps the count.</h2>
+      <p data-i18n="st.p1">Dice, minis, voices and the rules discussions stay at the table. HP Tracker only does the bookkeeping: who has the turn, how much damage went through the resistance, whose concentration is at risk.</p>
+      <p data-i18n="st.p2">Try it: take a few hit points off the goblin, heal Aria, pass the turn.</p>
+    </div>
+    <div class="demo panel" aria-label="Interactive example of the turn order" data-i18n-aria="demo.aria">
+      <div class="demo-head"><strong data-i18n="demo.turnorder">Turn order</strong><span class="muted"><span data-i18n="demo.round">Round</span> <span id="demoRound">1</span></span></div>
+      <div class="demo-list" id="demoList"></div>
+      <div class="demo-foot">
+        <button class="btn btn-ink btn-sm" type="button" id="demoNext" data-i18n="demo.next">Next turn</button>
+        <button class="btn btn-sm" type="button" id="demoReset" data-i18n="demo.reset">Reset</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Features ============ -->
+  <section class="wrap section" id="features">
+    <div class="section-head">
+      <p class="eyebrow" data-i18n="ft.eyebrow">What it does</p>
+      <h2 data-i18n="ft.title">Everything a fight needs to keep track of</h2>
+    </div>
+    <div class="features">
+      <article class="box"><h3 class="box-title" data-i18n="f1.t">Turn order by hand</h3><p data-i18n="f1.p">Drag the cards into the order your table agreed on. One click passes the turn, and rounds count themselves.</p></article>
+      <article class="box"><h3 class="box-title" data-i18n="f2.t">Damage done right</h3><p data-i18n="f2.p">Resistance, vulnerability, immunity and temporary HP are applied for you. Hit a whole group at once, or half damage for those who saved.</p></article>
+      <article class="box"><h3 class="box-title" data-i18n="f3.t">Dying and concentration</h3><p data-i18n="f3.p">Players at 0 HP get their death save pips. When a concentrating caster takes damage, the save DC pops up.</p></article>
+      <article class="box"><h3 class="box-title" data-i18n="f4.t">Conditions that run out</h3><p data-i18n="f4.p">Poisoned for 3 rounds? It counts down by itself and tells you when it ends.</p></article>
+      <article class="box"><h3 class="box-title" data-i18n="f5.t">Party and monster library</h3><p data-i18n="f5.p">Save your players once and bring them back every session. Add three goblins in one click.</p></article>
+      <article class="box"><h3 class="box-title" data-i18n="f6.t">Encounter difficulty</h3><p data-i18n="f6.p">From Easy to Deadly, worked out from the party's levels and the monsters' challenge ratings, with the XP award.</p></article>
+      <article class="box"><h3 class="box-title" data-i18n="f7.t">Undo anything</h3><p data-i18n="f7.p">Wrong target? Cmd+Z or Ctrl+Z puts it back, whatever it was.</p></article>
+      <article class="box"><h3 class="box-title" data-i18n="f8.t">Saves by itself</h3><p data-i18n="f8.p">Close it mid-fight and pick up next week exactly where you left off.</p></article>
+    </div>
+  </section>
+
+  <!-- ============ Gallery ============ -->
+  <section class="wrap section" id="tour">
+    <div class="tour">
+      <div class="seg seg-3" role="tablist" aria-label="Screens" data-i18n-aria="tour.aria" id="tourTabs">
+        <span class="seg-pill" aria-hidden="true"></span>
+        <button type="button" role="tab" aria-selected="true" aria-controls="tourShot" data-shot="0" data-i18n="tab.setup">Setup</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="tourShot" data-shot="1" data-i18n="tab.alerts">Enemies and alerts</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="tourShot" data-shot="2" data-i18n="tab.looks">Looks</button>
+      </div>
+      <figure class="shot" id="tourShot" role="tabpanel">
+        <img src="assets/img/setup.jpg" width="1600" height="990" loading="lazy" alt="The setup screen: the party in the turn order and the Start combat button." data-i18n-alt="alt.setup" data-shot-img="0">
+        <img src="assets/img/alerts.jpg" width="1600" height="990" loading="lazy" alt="An enemy in the spotlight, with alerts for a concentration save and a failed death save." data-i18n-alt="alt.alerts" data-shot-img="1" hidden>
+        <img src="assets/img/looks.jpg" width="1600" height="990" loading="lazy" alt="Picking a color and an icon for a character." data-i18n-alt="alt.looks" data-shot-img="2" hidden>
+        <figcaption>
+          <span data-i18n="cap.setup" data-shot-cap="0">Set up the encounter, then press Start combat.</span>
+          <span data-i18n="cap.alerts" data-shot-cap="1" hidden>Enemies are dark cards. Alerts tell you what the rules ask for: concentration saves, failed death saves.</span>
+          <span data-i18n="cap.looks" data-shot-cap="2" hidden>A color and an icon for every character.</span>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ============ Phones ============ -->
+  <section class="wrap section phones" id="phones">
+    <figure class="phone">
+      <img src="assets/img/phone.jpg" width="416" height="900" loading="lazy" alt="A player's phone: Aria's HP, the turn order and the It's your turn banner." data-i18n-alt="alt.phone">
+    </figure>
+    <div class="phones-copy">
+      <p class="eyebrow" data-i18n="ph.eyebrow">Player screens</p>
+      <h2 data-i18n="ph.title">Your players follow the fight on their phones</h2>
+      <p data-i18n="ph.p">Show a QR code, the players scan it and pick their character. Each one sees their HP, the turn order and an "It's your turn!" banner when it's their go.</p>
+      <ul class="ticks">
+        <li data-i18n="ph.l1">Nothing to install on the phones.</li>
+        <li data-i18n="ph.l2">Read-only: phones can look, not change.</li>
+        <li data-i18n="ph.l3">Enemies show by name only. No spoilers about their HP.</li>
+        <li data-i18n="ph.l4">It stays on your Wi-Fi: nothing goes to the internet.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ Download ============ -->
+  <section class="wrap section" id="download">
+    <div class="section-head">
+      <p class="eyebrow" data-i18n="dl.eyebrow">Download</p>
+      <h2 data-i18n="dl.title">Free, for Windows and Mac</h2>
+      <p class="muted"><span data-i18n="hero.version">Version</span> <span class="js-version">2.2.1</span><span class="js-date"></span>. <span data-i18n="dl.noinstall">Nothing to install: unzip and open.</span></p>
+    </div>
+    <div class="downloads">
+      <article class="box dl-card" id="dlWin">
+        <h3 class="box-title">Windows</h3>
+        <p class="req" data-i18n="dl.winreq">Windows 10 or 11, 64-bit</p>
+        <a class="btn btn-ink btn-wide" data-dl="win" href="https://github.com/imboro/hp-tracker/releases/latest/download/HP-Tracker-Windows.zip"><span data-i18n="dl.get">Download</span> <span class="size js-size-win"></span></a>
+        <ol class="steps">
+          <li data-i18n="dl.w1">Right-click the zip and choose Extract All.</li>
+          <li data-i18n="dl.w2">Open the folder and double-click HP Tracker.exe (keep SDL2.dll next to it).</li>
+          <li data-i18n="dl.w3">If "Windows protected your PC" appears: More info, then Run anyway. It only asks once.</li>
+        </ol>
+      </article>
+      <article class="box dl-card" id="dlMac">
+        <h3 class="box-title">Mac</h3>
+        <p class="req" data-i18n="dl.macreq">Apple Silicon (M1 or newer)</p>
+        <a class="btn btn-ink btn-wide" data-dl="mac" href="https://github.com/imboro/hp-tracker/releases/latest/download/HP-Tracker-Mac.zip"><span data-i18n="dl.get">Download</span> <span class="size js-size-mac"></span></a>
+        <ol class="steps">
+          <li data-i18n="dl.m1">Double-click the zip and drag HP Tracker to Applications.</li>
+          <li data-i18n="dl.m2">The first time, right-click the app and choose Open, then Open.</li>
+          <li data-i18n="dl.m3">No Open button? Go to System Settings, Privacy &amp; Security, and click Open Anyway.</li>
+        </ol>
+      </article>
+    </div>
+    <p class="note" data-i18n="dl.why">Why the warnings? The app isn't signed with a paid developer certificate, so Windows and macOS ask you to confirm the first time. It doesn't need the internet and sends nothing anywhere.</p>
+  </section>
+
+  <!-- ============ FAQ ============ -->
+  <section class="wrap section" id="faq">
+    <div class="section-head">
+      <p class="eyebrow" data-i18n="faq.eyebrow">Questions</p>
+      <h2 data-i18n="faq.title">Good to know</h2>
+    </div>
+    <div class="faq">
+      <details class="box"><summary data-i18n="q1.q">Is it free?</summary><p data-i18n="q1.a">Yes. No account, no ads, no subscription.</p></details>
+      <details class="box"><summary data-i18n="q2.q">Does it need the internet?</summary><p data-i18n="q2.a">No. The player screens only need the phones on the same Wi-Fi as the computer.</p></details>
+      <details class="box"><summary data-i18n="q3.q">Intel Mac, Linux, iPad?</summary><p data-i18n="q3.a">Not yet. Today it runs on Windows 10/11 and on Macs with Apple Silicon. Phones and tablets can follow the fight through the player screens.</p></details>
+      <details class="box"><summary data-i18n="q4.q">Where are my fights saved?</summary><p data-i18n="q4.a">On your computer only. Windows: %APPDATA%\HotelWorkshop\HPTracker. Mac: ~/Library/Application Support/HotelWorkshop/HPTracker. Updating the app keeps them.</p></details>
+      <details class="box"><summary data-i18n="q5.q">Is this an official product?</summary><p data-i18n="q5.a">No. HP Tracker is an independent fan-made tool for games using the fifth edition rules. It is not affiliated with or endorsed by Wizards of the Coast.</p></details>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-in">
+    <div class="footer-brand">
+      <img src="assets/icon.png" alt="" width="28" height="28">
+      <strong>HP Tracker</strong>
+      <span class="muted"><span data-i18n="ft.made">Made by</span> <a href="https://github.com/imboro">imboro</a> · <a href="https://github.com/imboro/hp-tracker/blob/main/CREDITS.txt" data-i18n="ft.credits">Credits and licenses</a></span>
+    </div>
+    <p class="legal">This work includes material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC and available at <a href="https://dnd.wizards.com/resources/systems-reference-document">https://dnd.wizards.com/resources/systems-reference-document</a>. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at <a href="https://creativecommons.org/licenses/by/4.0/legalcode">https://creativecommons.org/licenses/by/4.0/legalcode</a>.</p>
+    <p class="legal">HP Tracker is an independent, unofficial tool. It is not affiliated with, endorsed, sponsored, or approved by Wizards of the Coast LLC. Dungeons &amp; Dragons and D&amp;D are trademarks of Wizards of the Coast LLC.</p>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

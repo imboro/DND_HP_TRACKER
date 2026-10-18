@@ -17,7 +17,7 @@ Generated (not in git):
 |---|---|
 | `deps/` | The llvm-mingw compiler (~125 MB) and SDL2 for Windows, downloaded once (versions and checksums pinned in the script) |
 | `build/` | CMake build tree |
-| `dist/` | `DnD HP Tracker/` (the `.exe`, `SDL2.dll`, `README.txt`) and `DnD-HP-Tracker-windows.zip` |
+| `dist/` | `HP Tracker/` (the `.exe`, `SDL2.dll`, `README.txt`) and `HP-Tracker-windows.zip` |
 
 ## Option A: build on the Mac
 
@@ -29,7 +29,7 @@ The first run downloads the compiler and SDL2 into `windows/deps/` (a couple of
 minutes); later runs only rebuild. Only CMake needs to be installed
 (`brew install cmake`).
 
-Send `windows/dist/DnD-HP-Tracker-windows.zip`. It runs on 64-bit Windows 10
+Send `windows/dist/HP-Tracker-windows.zip`. It runs on 64-bit Windows 10
 and 11; nothing needs installing (the C++ runtime is built into the `.exe`).
 
 ## Option B: build on a Windows PC
@@ -45,7 +45,7 @@ cmake -S . -B windows\build -DCMAKE_TOOLCHAIN_FILE=C:\path\to\vcpkg\scripts\buil
 cmake --build windows\build --config Release
 ```
 
-The app is `windows\build\Release\DnD HP Tracker.exe`; vcpkg copies
+The app is `windows\build\Release\HP Tracker.exe`; vcpkg copies
 `SDL2.dll` next to it.
 
 ## Differences from the Mac version

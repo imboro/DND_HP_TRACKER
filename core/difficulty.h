@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 
-// Encounter difficulty using the D&D 5e (2014 DMG) XP threshold method.
+// Encounter difficulty using the 5e XP threshold method (thresholds by level, monster multipliers).
 
 enum class Difficulty { Trivial, Easy, Medium, Hard, Deadly };
 
