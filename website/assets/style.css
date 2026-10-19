@@ -87,7 +87,14 @@ p { margin: 0; }
 
 /* Segmented control with a sliding ink pill (the app's sidebar tabs). */
 .seg { position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 4px; border: 2px solid var(--ink); border-radius: 999px; background: var(--panel); box-shadow: 2px 3px 0 var(--ink); }
-.seg button { position: relative; z-index: 1; border: 0; background: none; font: 800 0.85rem/1 var(--body); padding: 7px 12px; color: var(--muted); cursor: pointer; border-radius: 999px; transition: color 0.2s; }
+/* overflow: hidden keeps everything inside the pill shape: Safari's own button
+   backgrounds and focus rings are square and would poke out at the round ends. */
+.seg { overflow: hidden; isolation: isolate; }
+.seg button { position: relative; z-index: 1; border: 0; background: transparent; -webkit-appearance: none; appearance: none;
+  -webkit-tap-highlight-color: transparent; font: 800 0.85rem/1 var(--body); padding: 7px 12px; color: var(--muted);
+  cursor: pointer; border-radius: 999px; transition: color 0.2s; }
+.seg button:focus { outline: none; }
+.seg button:focus-visible { outline: 2px solid var(--blue); outline-offset: -3px; border-radius: 999px; }
 .seg button[aria-pressed="true"] { color: #fff; }
 .seg-pill { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 2); border-radius: 999px; background: var(--ink); transition: transform 0.25s cubic-bezier(.2,.8,.2,1); }
 
