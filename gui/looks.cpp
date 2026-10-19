@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include "i18n.h"
 #include "ui_kit.h"
 
 int colorIndexFor(Side side, int color) {
@@ -117,7 +118,7 @@ bool lookPicker(int* color, int* icon, Side side, float S) {
     const ImU32 shown = PALETTE[colorIndexFor(side, *color)].col;
 
     // Colors: "default" first, then the palette, in one row.
-    ImGui::TextDisabled("Color");
+    ImGui::TextDisabled("%s", T("Color"));
     {
         const float d = 24 * S, gap = 7 * S;
         const ImVec2 start = ImGui::GetCursorScreenPos();
@@ -131,7 +132,7 @@ bool lookPicker(int* color, int* icon, Side side, float S) {
                 changed = true;
             }
             const bool hovered = ImGui::IsItemHovered();
-            if (hovered) ImGui::SetTooltip("%s", i < 0 ? "Default" : PALETTE[i].name);
+            if (hovered) ImGui::SetTooltip("%s", T(i < 0 ? "Default" : PALETTE[i].name));
             ImGui::PopID();
             const ImU32 fill = i < 0 ? PALETTE[side == Side::Players ? 0 : 1].col : PALETTE[i].col;
             dl->AddCircleFilled(c, d * 0.5f - 2 * S, fill);
@@ -146,7 +147,7 @@ bool lookPicker(int* color, int* icon, Side side, float S) {
     }
 
     // Icons: "default" first, then the set, seven per row, drawn in the chosen color.
-    ImGui::TextDisabled("Icon");
+    ImGui::TextDisabled("%s", T("Icon"));
     {
         const float t = 36 * S, gap = 7 * S;
         const int perRow = 7;
@@ -163,7 +164,7 @@ bool lookPicker(int* color, int* icon, Side side, float S) {
                 changed = true;
             }
             const bool hovered = ImGui::IsItemHovered();
-            if (hovered) ImGui::SetTooltip("%s", i < 0 ? "Default" : ICON_NAMES[i]);
+            if (hovered) ImGui::SetTooltip("%s", T(i < 0 ? "Default" : ICON_NAMES[i]));
             ImGui::PopID();
             const bool on = *icon == i;
             dl->AddRectFilled(a, a + ImVec2(t, t), on ? withAlpha(shown, 40) : (hovered ? COL_RAISED_HI : COL_TRACK), 9 * S);

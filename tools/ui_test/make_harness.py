@@ -23,6 +23,7 @@ open(os.path.join(out, 'test_hooks.h'), 'w').write('''#pragma once
 #include <vector>
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "i18n.h"
 inline std::map<std::string, ImRect> g_rects;
 inline std::string g_shot;
 inline int g_forceTab = -1;
@@ -82,8 +83,8 @@ patch('app.cpp', [
 ])
 
 patch('app_sidebar.cpp', [
-    ('segmentedTabs(TAB_LABELS, 3, &activeTab, S);',
-     'if (g_forceTab >= 0) activeTab = g_forceTab;\n    segmentedTabs(TAB_LABELS, 3, &activeTab, S);'),
+    ('segmentedTabs(tabLabels, 3, &activeTab, S);',
+     'if (g_forceTab >= 0) activeTab = g_forceTab;\n    segmentedTabs(tabLabels, 3, &activeTab, S);'),
     ('    ImGui::BeginChild("CombatBody", ImVec2(0, 0), false);\n',
      '    ImGui::BeginChild("CombatBody", ImVec2(0, 0), false);\n    if (g_scrollCombat >= 0) ImGui::SetScrollY(g_scrollCombat);\n'),
 ])

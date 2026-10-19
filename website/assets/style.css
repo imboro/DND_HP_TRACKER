@@ -90,7 +90,6 @@ p { margin: 0; }
 .seg button { position: relative; z-index: 1; border: 0; background: none; font: 800 0.85rem/1 var(--body); padding: 7px 12px; color: var(--muted); cursor: pointer; border-radius: 999px; transition: color 0.2s; }
 .seg button[aria-pressed="true"] { color: #fff; }
 .seg-pill { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 2); border-radius: 999px; background: var(--ink); transition: transform 0.25s cubic-bezier(.2,.8,.2,1); }
-.seg[data-active="es"] .seg-pill { transform: translateX(100%); }
 
 /* ---- Hero ---- */
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: clamp(28px, 4vw, 56px); align-items: center; padding-block: clamp(36px, 6vw, 72px) clamp(28px, 4vw, 48px); }
@@ -177,6 +176,7 @@ p { margin: 0; }
 .seg-3[data-active="2"] .seg-pill { transform: translateX(200%); }
 .seg-3 button { padding: 9px 16px; font-size: 0.92rem; white-space: nowrap; }
 .seg-3 button[aria-selected="true"] { color: #fff; }
+.seg-lang button { padding: 7px 11px; font-size: 0.85rem; }
 @media (max-width: 520px) { .seg-3 button { padding: 8px 9px; font-size: 0.8rem; } }
 
 .phones { grid-template-columns: minmax(0, 340px) minmax(0, 1fr); align-items: center; gap: clamp(28px, 6vw, 80px); }

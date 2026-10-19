@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 # The app version: shown in the Mac app and on the downloads (make_downloads.sh).
-project(HpTracker VERSION 2.2.1 LANGUAGES CXX)
+project(HpTracker VERSION 2.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,6 +32,7 @@ add_executable(hp_tracker_gui
     gui/ui_kit.cpp
     gui/alerts.cpp
     gui/undo_history.cpp
+    gui/i18n.cpp
     gui/save_format.cpp
     gui/library.cpp
     gui/player_state.cpp

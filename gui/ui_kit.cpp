@@ -8,6 +8,7 @@
 
 #include "imgui_internal.h"  // GetActiveID, the current window (section boxes)
 #include "difficulty.h"      // crLabel / crXp for crCombo
+#include "i18n.h"
 
 ImFont* g_fontBold = nullptr;
 ImFont* g_fontHeavy = nullptr;
@@ -341,11 +342,12 @@ void pill(const char* text, ImU32 color, float S) {
 }
 
 // Pill-shaped segmented control (used for the sidebar tabs).
-void segmentedTabs(const char* const* labels, int count, int* active, float S) {
+void segmentedTabs(const char* const* labels, int count, int* active, float S, float width, float height) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 p0 = ImGui::GetCursorScreenPos();
-    const float w = ImGui::GetContentRegionAvail().x - 3 * S - 1 * S;
-    const float h = ImGui::GetFrameHeight() + 4 * S;
+    const float w = width > 0.0f ? width : ImGui::GetContentRegionAvail().x - 3 * S - 1 * S;
+    const float h = height > 0.0f ? height : ImGui::GetFrameHeight() + 4 * S;
+    const float labelMul = height > 0.0f ? 0.85f : 1.0f;  // a compact control gets smaller labels
     const float inset = 4 * S;
     inkBox(dl, p0, p0 + ImVec2(w, h), h * 0.5f, S);
     const float segW = (w - inset * 2) / static_cast<float>(count);
@@ -375,9 +377,9 @@ void segmentedTabs(const char* const* labels, int count, int* active, float S) {
         const ImVec2 b(a.x + segW, p0.y + h - inset);
         // Labels turn white as the pill slides under them.
         const float under = clamp01(1.0f - std::fabs(pill - static_cast<float>(i)));
-        const ImVec2 ts = boldTextSize(labels[i]);
+        const ImVec2 ts = boldTextSize(labels[i], labelMul);
         boldText(dl, ImVec2((a.x + b.x - ts.x) * 0.5f, (a.y + b.y - ts.y) * 0.5f),
-                 mixColor(COL_MUTED, COL_WHITE, under), labels[i]);
+                 mixColor(COL_MUTED, COL_WHITE, under), labels[i], labelMul);
     }
     ImGui::SetCursorScreenPos(p0);
     ImGui::Dummy(ImVec2(w, h + 3 * S));
@@ -486,12 +488,12 @@ bool crCombo(const char* label, int* index) {
     const std::string preview = *index < 0 ? std::string("-") : std::string(crLabel(*index)) + "  (" +
                                 std::to_string(crXp(*index)) + " XP)";
     if (ImGui::BeginCombo(label, preview.c_str())) {
-        if (ImGui::Selectable("-  (not set)", *index < 0)) {
+        if (ImGui::Selectable(T("-  (not set)"), *index < 0)) {
             *index = -1;
             changed = true;
         }
         for (int i = 0; i < crCount(); i++) {
-            const std::string item = std::string("CR ") + crLabel(i) + "  (" + std::to_string(crXp(i)) + " XP)";
+            const std::string item = TF("CR %s", crLabel(i)) + "  (" + std::to_string(crXp(i)) + " XP)";
             if (ImGui::Selectable(item.c_str(), *index == i)) {
                 *index = i;
                 changed = true;
@@ -504,7 +506,7 @@ bool crCombo(const char* label, int* index) {
 
 bool damageModCombo(const char* label, DamageMod* mod) {
     int v = static_cast<int>(*mod);
-    const char* items[] = {"Normal", "Resistant (half)", "Vulnerable (double)", "Immune (none)"};
+    const char* items[] = {T("Normal"), T("Resistant (half)"), T("Vulnerable (double)"), T("Immune (none)")};
     if (ImGui::Combo(label, &v, items, 4)) {
         *mod = static_cast<DamageMod>(v);
         return true;

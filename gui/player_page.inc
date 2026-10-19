@@ -96,23 +96,23 @@ footer button{font:inherit;font-size:14px;font-weight:700;color:var(--muted);bac
 @keyframes beat{0%,100%{background:#fff4f2}50%{background:#ffe2de}}
 @keyframes blink{50%{opacity:.25}}
 </style></head><body>
-<div id="banner" class="heavy">&#9654; It's your turn!</div>
-<header><h1 class="heavy">HP Tracker</h1><span class="pill"><span id="live" class="dot off"></span><span id="status">Connecting...</span></span></header>
-<div id="wait" class="box" hidden><div class="heavy" style="font-size:20px">Waiting for the party</div><div class="sub">The DM hasn't added any players yet.</div></div>
-<div id="who" class="box" hidden><div class="heavy" style="font-size:20px">Who are you?</div><div class="sub">Tap your character. This phone will remember it.</div><div id="pick" class="pick"></div></div>
+<div id="banner" class="heavy">&#9654; <span data-tr="It's your turn!">It's your turn!</span></div>
+<header><h1 class="heavy">HP Tracker</h1><span class="pill"><span id="live" class="dot off"></span><span id="status" data-tr="Connecting...">Connecting...</span></span></header>
+<div id="wait" class="box" hidden><div class="heavy" style="font-size:20px" data-tr="Waiting for the party">Waiting for the party</div><div class="sub" data-tr="The DM hasn't added any players yet.">The DM hasn't added any players yet.</div></div>
+<div id="who" class="box" hidden><div class="heavy" style="font-size:20px" data-tr="Who are you?">Who are you?</div><div class="sub" data-tr="Tap your character. This phone will remember it.">Tap your character. This phone will remember it.</div><div id="pick" class="pick"></div></div>
 <div id="me" class="box" hidden>
-<div class="head"><div class="tile" id="meTile"></div><div style="min-width:0"><div class="name heavy" id="meName"></div><div class="sub" id="meSub"></div></div><span class="turnTag">&#9654; YOUR TURN</span></div>
+<div class="head"><div class="tile" id="meTile"></div><div style="min-width:0"><div class="name heavy" id="meName"></div><div class="sub" id="meSub"></div></div><span class="turnTag">&#9654; <span data-tr="YOUR TURN">YOUR TURN</span></span></div>
 <div class="hpline"><span class="hp heavy" id="meHp"></span><span class="max" id="meMax"></span><span class="temp" id="meTemp"></span></div>
 <div class="bar"><div class="chunk" id="meChunk"></div><div class="fill" id="meFill"></div></div>
 <div class="tempbar" id="meTempBar"></div>
-<div class="saves" id="meSaves">Death saves <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="sep"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
+<div class="saves" id="meSaves"><span data-tr="Death saves">Death saves</span> <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="sep"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div>
 <div class="stats" id="meStats"></div>
 <div class="chips" id="meChips"></div>
-<div class="stamp heavy">DEAD</div>
+<div class="stamp heavy" data-tr="DEAD">DEAD</div>
 </div>
 <h2 class="heavy"><span id="orderTitle">Turn order</span><span id="round" class="sub"></span></h2>
 <div id="order"></div>
-<footer><button id="change" hidden>Change character</button></footer>
+<footer><button id="change" hidden data-tr="Change character">Change character</button></footer>
 )PAGE",
 R"PAGE(<script>
 "use strict";
@@ -139,13 +139,22 @@ const CROSS=L(.25,.25,.75,.75)+L(.75,.25,.25,.75);
 const svg=(i,col)=>`<svg viewBox="0 0 1 1" fill="none" stroke="${col}" style="color:${col}" stroke-width=".075" stroke-linecap="round" stroke-linejoin="round">${i<0?CROSS:(ICONS[i]||ICONS[0])}</svg>`;
 const tint=(hex,a)=>hex+Math.round(a*255).toString(16).padStart(2,'0');
 const hpColor=f=>f>.5?'var(--green)':f>.25?'var(--amber)':'var(--red)';
+// The page follows the app's language (sent as s.lang); the texts it writes itself are
+// translated here, the ones from the fight (conditions, damage type) come translated.
+const TR={
+es:{"It's your turn!":"¡Es tu turno!","Connecting...":"Conectando...","Reconnecting...":"Reconectando...","Waiting for the party":"Esperando al grupo","The DM hasn't added any players yet.":"El máster aún no ha añadido jugadores.","Who are you?":"¿Quién eres?","Tap your character. This phone will remember it.":"Toca tu personaje. Este móvil lo recordará.","YOUR TURN":"TU TURNO","Death saves":"Salvaciones de muerte","DEAD":"MUERTO","Change character":"Cambiar de personaje","Level":"Nivel","HP":"PG","temp":"temp","AC":"CA","Speed":"Velocidad","Passive Perc.":"Percep. pasiva","Damage":"Daño","DYING":"MURIENDO","STABLE":"ESTABLE","BLOODIED":"MALHERIDO","CONC":"CONC","Turn order":"Orden de turno","The party":"El grupo","Round":"Ronda","No one here yet.":"Aún no hay nadie.","Enemy":"Enemigo","Setting up":"Preparando"},
+ca:{"It's your turn!":"És el teu torn!","Connecting...":"Connectant...","Reconnecting...":"Reconnectant...","Waiting for the party":"Esperant el grup","The DM hasn't added any players yet.":"El màster encara no ha afegit jugadors.","Who are you?":"Qui ets?","Tap your character. This phone will remember it.":"Toca el teu personatge. Aquest mòbil el recordarà.","YOUR TURN":"EL TEU TORN","Death saves":"Salvacions de mort","DEAD":"MORT","Change character":"Canviar de personatge","Level":"Nivell","HP":"PV","temp":"temp","AC":"CA","Speed":"Velocitat","Passive Perc.":"Percep. passiva","Damage":"Dany","DYING":"MORINT","STABLE":"ESTABLE","BLOODIED":"MALFERIT","CONC":"CONC","Turn order":"Ordre de torn","The party":"El grup","Round":"Ronda","No one here yet.":"Encara no hi ha ningú.","Enemy":"Enemic","Setting up":"Preparant"}};
+let lang='en';
+const tr=k=>(TR[lang]&&TR[lang][k])||k;
+function setLang(l){if(l===lang)return;lang=l;document.documentElement.lang=l;document.querySelectorAll('[data-tr]').forEach(e=>e.textContent=tr(e.dataset.tr));}
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 let me=localStorage.getItem('hpTrackerMe')||'';
 {const q=new URLSearchParams(location.search).get('me');if(q){me=q;localStorage.setItem('hpTrackerMe',me);}}  // ?me=Name picks the character
 let last=null,prev={},prevTurn=null,first=true,rows={};
 
-function setLive(on){$('live').className=on?'dot':'dot off';if(!on)$('status').textContent='Reconnecting...';}
+let reconnecting=false;
+function setLive(on){$('live').className=on?'dot':'dot off';if(!on){reconnecting=true;$('status').textContent=tr('Reconnecting...');}}
 
 function floatNum(text,kind,crit){const f=document.createElement('div');f.className='float heavy '+kind+(crit?' crit':'');f.textContent=text;$('me').appendChild(f);setTimeout(()=>f.remove(),1200);}
 function flash(color){const f=document.createElement('div');f.className='flash';f.style.background=color;$('me').appendChild(f);setTimeout(()=>f.remove(),600);}
@@ -166,40 +175,40 @@ function showMe(p,s){
   $('meTile').style.background=tint(p.color,dead?.08:.16);
   $('meTile').innerHTML=svg(dead?-1:p.icon,dead?'#969692':p.color);
   $('meName').textContent=p.name;
-  $('meSub').textContent='Level '+p.level;
+  $('meSub').textContent=tr('Level')+' '+p.level;
   box.classList.toggle('turn',!!s.combat&&s.turn===p.name);
   box.classList.toggle('dying',p.life==='dying');
   box.classList.toggle('dead',dead);
-  $('meHp').textContent=p.hp;$('meMax').textContent='/ '+p.max+' HP';
-  $('meTemp').textContent=p.temp>0?'+'+p.temp+' temp':'';
+  $('meHp').textContent=p.hp;$('meMax').textContent='/ '+p.max+' '+tr('HP');
+  $('meTemp').textContent=p.temp>0?'+'+p.temp+' '+tr('temp'):'';
   setBar($('meFill'),$('meChunk'),before&&before.hp,p.hp,p.max);
   $('meTempBar').style.width=(p.temp>0?Math.max(4,Math.min(100,100*p.temp/p.max)):0)+'%';
   if(before){
     const d=p.hp-before.hp,crit=Math.abs(d)>=.4*p.max;
     if(d<0){floatNum(d,'dmg',crit);shake(box,crit);flash('rgba(255,60,60,.5)');if(navigator.vibrate)navigator.vibrate(crit?[90,40,140]:60);}
     else if(d>0){floatNum('+'+d,'heal',crit);flash('rgba(60,200,100,.45)');}
-    else if(p.temp<before.temp){floatNum('-'+(before.temp-p.temp)+' temp','tmp');shake(box,false);}
-    else if(p.temp>before.temp){floatNum('+'+(p.temp-before.temp)+' temp','tmp');}
+    else if(p.temp<before.temp){floatNum('-'+(before.temp-p.temp)+' '+tr('temp'),'tmp');shake(box,false);}
+    else if(p.temp>before.temp){floatNum('+'+(p.temp-before.temp)+' '+tr('temp'),'tmp');}
   }
   const sv=$('meSaves');sv.style.display=(p.hp===0&&!dead)?'flex':'none';
   const pips=sv.querySelectorAll('.pip');
   pips.forEach((e,i)=>{e.className='pip'+(i<3?(i<p.saves[0]?' ok':''):(i-3<p.saves[1]?' bad':''));});
-  let st=`<div class="stat"><b>${p.ac}</b><span>AC</span></div><div class="stat"><b>${p.speed}</b><span>Speed</span></div><div class="stat"><b>${p.pp}</b><span>Passive Perc.</span></div>`;
-  if(p.mod)st+=`<div class="stat"><b style="font-size:15px;line-height:24px">${esc(p.mod)}</b><span>Damage</span></div>`;
+  let st=`<div class="stat"><b>${p.ac}</b><span>${tr('AC')}</span></div><div class="stat"><b>${p.speed}</b><span>${tr('Speed')}</span></div><div class="stat"><b>${p.pp}</b><span>${tr('Passive Perc.')}</span></div>`;
+  if(p.mod)st+=`<div class="stat"><b style="font-size:15px;line-height:24px">${esc(p.mod)}</b><span>${tr('Damage')}</span></div>`;
   $('meStats').innerHTML=st;
   const chip=(t,c)=>`<span class="chip" style="color:${c};border-color:${c};background:${tint(c,.1)}">${esc(t)}</span>`;
   let ch='';
-  if(p.life==='dying')ch+=chip('DYING','#e2483c');if(p.life==='stable')ch+=chip('STABLE','#2ea44f');
-  if(p.bloodied)ch+=chip('BLOODIED','#e2483c');if(p.conc)ch+=chip('CONC','#8b5cf6');
+  if(p.life==='dying')ch+=chip(tr('DYING'),'#e2483c');if(p.life==='stable')ch+=chip(tr('STABLE'),'#2ea44f');
+  if(p.bloodied)ch+=chip(tr('BLOODIED'),'#e2483c');if(p.conc)ch+=chip(tr('CONC'),'#8b5cf6');
   for(const c of p.conditions)ch+=chip(c[0]+(c[1]>0?' '+c[1]:''),'#b07a04');
   $('meChips').innerHTML=ch;
 }
 
 function renderOrder(s){
   const box=$('order'),seen={};
-  $('orderTitle').textContent=s.combat?'Turn order':'The party';
-  $('round').textContent=s.combat?'Round '+s.round:'';
-  if(!s.order.length){box.innerHTML='<div class="empty">No one here yet.</div>';rows={};return;}
+  $('orderTitle').textContent=tr(s.combat?'Turn order':'The party');
+  $('round').textContent=s.combat?tr('Round')+' '+s.round:'';
+  if(!s.order.length){box.innerHTML='<div class="empty">'+tr('No one here yet.')+'</div>';rows={};return;}
   const empty=box.querySelector('.empty');if(empty)empty.remove();
   for(const o of s.order){
     let r=rows[o.name];
@@ -214,7 +223,7 @@ function renderOrder(s){
     r.querySelector('.t').innerHTML=svg(dead?-1:o.icon,dead?'#969692':o.color);
     r.querySelector('.nm').textContent=o.name;
     r.querySelector('.mini').style.display=player?'block':'none';
-    r.querySelector('.kind').textContent=player?'':'Enemy';
+    r.querySelector('.kind').textContent=player?'':tr('Enemy');
     r.querySelector('.hpt').textContent=player?o.hp+' / '+o.max:'';
     if(player){const i=r.querySelector('.mini i');i.style.width=Math.max(0,Math.min(100,100*o.hp/Math.max(1,o.max)))+'%';i.style.background=hpColor(o.hp/Math.max(1,o.max));
       const b=prev[o.name];if(b&&o.hp<b.hp&&o.name!==me)shake(r,false);}
@@ -224,7 +233,8 @@ function renderOrder(s){
 }
 
 function render(s){
-  $('status').textContent=s.combat?'Round '+s.round:'Setting up';
+  if(s.lang)setLang(s.lang);
+  $('status').textContent=s.combat?tr('Round')+' '+s.round:tr('Setting up');
   const players=s.order.filter(o=>o.side==='player');
   const mine=players.find(p=>p.name===me);
   $('wait').hidden=players.length>0;
@@ -248,7 +258,7 @@ async function tick(){
     const r=await fetch('state',{cache:'no-store'});
     const s=await r.json();
     $('live').className='dot';
-    if(!last||s.v!==last.v||$('status').textContent==='Reconnecting...')render(s);
+    if(!last||s.v!==last.v||reconnecting){reconnecting=false;render(s);}
     last=s;
   }catch(e){setLive(false);}
   setTimeout(tick,400);

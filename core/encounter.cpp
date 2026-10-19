@@ -153,12 +153,16 @@ bool Encounter::isOver() const {
 
 std::vector<std::string> Encounter::tickConditions() {
     std::vector<std::string> lines;
+    for (const auto& [name, condition] : tickConditionsEnded()) lines.push_back(name + ": " + condition + " ended");
+    return lines;
+}
+
+std::vector<std::pair<std::string, std::string>> Encounter::tickConditionsEnded() {
+    std::vector<std::pair<std::string, std::string>> ended;
     for (std::vector<Creature>* g : {&players, &creatures}) {
         for (Creature& c : *g) {
-            for (const std::string& ended : c.tickConditions()) {
-                lines.push_back(c.getName() + ": " + ended + " ended");
-            }
+            for (const std::string& condition : c.tickConditions()) ended.emplace_back(c.getName(), condition);
         }
     }
-    return lines;
+    return ended;
 }

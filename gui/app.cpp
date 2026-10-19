@@ -7,6 +7,7 @@
 #include "imgui_impl_sdlrenderer2.h"
 #include "qrcodegen.hpp"
 #include "board_view.h"
+#include "i18n.h"
 #include "player_state.h"
 #include "save_format.h"
 #include "ui_kit.h"
@@ -30,7 +31,7 @@ App::App(SDL_Window* window, SDL_Renderer* renderer)
     {
         std::string text;
         if (readFile(path, text) && deserializeBoard(text, encounter, board)) {
-            statusMsg = "Loaded last session.";
+            statusMsg = "Loaded last session.";  // translated when shown
         } else {
             Creature hero("Hero", 40);
             hero.setAc(16);
@@ -54,13 +55,26 @@ App::App(SDL_Window* window, SDL_Renderer* renderer)
         std::string text;
         if (readFile(partyPath, text)) deserializeParty(text, party);
     }
-    // View settings (not part of the encounter, so undo doesn't touch them).
+    // View settings (not part of the encounter, so undo doesn't touch them): one
+    // key=value per line. The language defaults to the system's the first time.
+    setLanguage(systemLanguage());
     {
         std::string text;
-        if (readFile(settingsPath, text) && text.rfind("cardScale=", 0) == 0) {
-            try {
-                g_cardScale = std::clamp(std::stof(text.substr(10)), 0.6f, 1.0f);
-            } catch (const std::exception&) {
+        if (readFile(settingsPath, text)) {
+            size_t start = 0;
+            while (start < text.size()) {
+                size_t end = text.find('\n', start);
+                if (end == std::string::npos) end = text.size();
+                const std::string line = text.substr(start, end - start);
+                start = end + 1;
+                const size_t eq = line.find('=');
+                if (eq == std::string::npos) continue;
+                const std::string key = line.substr(0, eq), value = line.substr(eq + 1);
+                try {
+                    if (key == "cardScale") g_cardScale = std::clamp(std::stof(value), 0.6f, 1.0f);
+                } catch (const std::exception&) {
+                }
+                if (key == "lang") setLanguage(langFromCode(value));
             }
         }
     }
@@ -199,7 +213,9 @@ void App::saveLibrary() { writeFile(libraryPath, serializeLibrary(library)); }
 
 void App::saveParty() { writeFile(partyPath, serializeParty(party)); }
 
-void App::saveSettings() { writeFile(settingsPath, "cardScale=" + std::to_string(g_cardScale) + "\n"); }
+void App::saveSettings() {
+    writeFile(settingsPath, "cardScale=" + std::to_string(g_cardScale) + "\nlang=" + langCode(language()) + "\n");
+}
 
 // ---- Undo
 
@@ -212,13 +228,13 @@ void App::pushUndo() { pushUndoState(snapshot()); }
 void App::doUndo() {
     if (!history.canUndo()) return;
     deserializeBoard(history.undo(snapshot()), encounter, board);
-    addLog("Undo", COL_MUTED);
+    addLog(T("Undo"), COL_MUTED);
 }
 
 void App::doRedo() {
     if (!history.canRedo()) return;
     deserializeBoard(history.redo(snapshot()), encounter, board);
-    addLog("Redo", COL_MUTED);
+    addLog(T("Redo"), COL_MUTED);
 }
 
 // ---- Rules actions (each caller pushes undo once before a batch)
@@ -239,35 +255,35 @@ void App::applyHit(CardRef r, int amount) {
         st.pendingLabel = "-" + std::to_string(d.hpLost);
     } else if (d.absorbed > 0) {
         st.pendingKind = FxKind::Temp;
-        st.pendingLabel = "-" + std::to_string(d.absorbed) + " temp";
+        st.pendingLabel = "-" + std::to_string(d.absorbed) + " " + T("temp");
     } else if (d.rolled > 0 && c->getDamageMod() == DamageMod::Immune) {
         st.pendingKind = FxKind::Immune;
-        st.pendingLabel = "IMMUNE";
+        st.pendingLabel = T("IMMUNE");
     }
 
-    std::string line = name + " takes " + std::to_string(d.afterMod);
-    if (c->getDamageMod() == DamageMod::Resistant) line += " (resisted " + std::to_string(d.rolled) + ")";
-    if (c->getDamageMod() == DamageMod::Vulnerable) line += " (vulnerable, " + std::to_string(d.rolled) + " x2)";
-    if (c->getDamageMod() == DamageMod::Immune) line = name + " is immune (" + std::to_string(d.rolled) + " ignored)";
-    if (d.absorbed > 0) line += ", " + std::to_string(d.absorbed) + " absorbed by temp HP";
+    std::string line = TF("%s takes %d", name.c_str(), d.afterMod);
+    if (c->getDamageMod() == DamageMod::Resistant) line += TF(" (resisted %d)", d.rolled);
+    if (c->getDamageMod() == DamageMod::Vulnerable) line += TF(" (vulnerable, %d x2)", d.rolled);
+    if (c->getDamageMod() == DamageMod::Immune) line = TF("%s is immune (%d ignored)", name.c_str(), d.rolled);
+    if (d.absorbed > 0) line += TF(", %d absorbed by temp HP", d.absorbed);
     line += " -> " + std::to_string(c->getCurrentHp()) + "/" + std::to_string(c->getMaxHp());
     addLog(line, COL_RED);
 
     if (h.concentrationDc > 0) {
-        addAlert(name + ": concentration save, DC " + std::to_string(h.concentrationDc), COL_VIOLET);
+        addAlert(TF("%s: concentration save, DC %d", name.c_str(), h.concentrationDc), COL_VIOLET);
     }
-    if (h.concentrationLost) addAlert(name + " drops to 0 HP and loses concentration", COL_VIOLET);
+    if (h.concentrationLost) addAlert(TF("%s drops to 0 HP and loses concentration", name.c_str()), COL_VIOLET);
     if (h.instantDeath) {
-        addAlert(name + " is killed outright (massive damage)", COL_RED);
+        addAlert(TF("%s is killed outright (massive damage)", name.c_str()), COL_RED);
     } else if (h.deathSaveFailed) {
         if (h.killedOutright) {
-            addAlert(name + " fails a third death save and dies", COL_RED);
+            addAlert(TF("%s fails a third death save and dies", name.c_str()), COL_RED);
         } else {
-            addAlert(name + " is hit at 0 HP: death save failure (" + std::to_string(c->getDeathFailures()) + "/3)",
-                     COL_RED);
+            addAlert(TF("%s is hit at 0 HP: death save failure (%d/3)", name.c_str(), c->getDeathFailures()), COL_RED);
         }
     } else if (h.droppedToZero) {
-        addLog(name + (r.side == Side::Players ? " falls unconscious and is dying" : " is defeated"), COL_MUTED);
+        addLog(r.side == Side::Players ? TF("%s falls unconscious and is dying", name.c_str())
+                                       : TF("%s is defeated", name.c_str()), COL_MUTED);
     }
 }
 
@@ -279,11 +295,11 @@ void App::applyHeal(CardRef r, int amount) {
     CardState& st = board.get(r);
     st.requested = amount;
     st.pendingKind = FxKind::Heal;
-    st.pendingLabel = gained > 0 ? "+" + std::to_string(gained) : "FULL";
-    std::string line = c->getName() + " heals " + std::to_string(gained) + " -> " +
+    st.pendingLabel = gained > 0 ? "+" + std::to_string(gained) : std::string(T("FULL"));
+    std::string line = TF("%s heals %d", c->getName().c_str(), gained) + " -> " +
                        std::to_string(c->getCurrentHp()) + "/" + std::to_string(c->getMaxHp());
     addLog(line, COL_GREEN);
-    if (wasDown && gained > 0 && r.side == Side::Players) addLog(c->getName() + " is back on their feet", COL_GREEN);
+    if (wasDown && gained > 0 && r.side == Side::Players) addLog(TF("%s is back on their feet", c->getName().c_str()), COL_GREEN);
 }
 
 void App::applyTemp(CardRef r, int amount) {
@@ -293,9 +309,8 @@ void App::applyTemp(CardRef r, int amount) {
     c->grantTempHp(amount);
     CardState& st = board.get(r);
     st.pendingKind = FxKind::Temp;
-    st.pendingLabel = "+" + std::to_string(c->getTempHp() - before) + " temp";
-    addLog(c->getName() + " has " + std::to_string(c->getTempHp()) + " temp HP" +
-               (amount <= before ? " (kept the higher value)" : ""),
+    st.pendingLabel = "+" + std::to_string(c->getTempHp() - before) + " " + T("temp");
+    addLog(TF("%s has %d temp HP", c->getName().c_str(), c->getTempHp()) + (amount <= before ? T(" (kept the higher value)") : ""),
            COL_TEMP);
 }
 
@@ -312,10 +327,10 @@ bool App::anyoneStanding() const {
 
 // A new round: timed conditions count down (with an alert for each one that ends).
 void App::beginNewRound() {
-    const std::vector<std::string> ended = encounter.tickConditions();
+    const auto ended = encounter.tickConditionsEnded();
     board.round++;
-    addLog("--- Round " + std::to_string(board.round) + " ---", COL_MUTED);
-    for (const std::string& line : ended) addAlert(line, COL_AMBER);
+    addLog(TF("--- Round %d ---", board.round), COL_MUTED);
+    for (const auto& [who, condition] : ended) addAlert(TF("%s: %s ended", who.c_str(), TKnown(condition)), COL_AMBER);
 }
 
 // Gives the turn to the next combatant standing after order index `start`
@@ -331,7 +346,7 @@ bool App::passTurnFrom(int start, bool skipFallen) {
         board.turn = cand;
         board.turnValid = true;
         scrollToTurn = true;
-        addLog("Turn: " + encounter.at(cand.side, cand.index)->getName(), COL_MUTED);
+        addLog(TF("Turn: %s", encounter.at(cand.side, cand.index)->getName().c_str()), COL_MUTED);
         return true;
     }
     return false;
@@ -360,7 +375,7 @@ void App::startTurnAt(CardRef r) {
     board.turn = r;
     board.turnValid = true;
     scrollToTurn = true;
-    addLog("Turn: " + encounter.at(r.side, r.index)->getName(), COL_MUTED);
+    addLog(TF("Turn: %s", encounter.at(r.side, r.index)->getName().c_str()), COL_MUTED);
 }
 
 // Setup -> combat: round 1, the turn goes to the first card standing.
@@ -372,7 +387,7 @@ void App::startCombat() {
     board.turnValid = false;
     encounter.resume();
     board.clearSelection();
-    addLog("=== Combat started ===", COL_MUTED);
+    addLog(T("=== Combat started ==="), COL_MUTED);
     passTurnFrom(-1, false);
 }
 
@@ -387,7 +402,7 @@ void App::endCombat() {
     board.turnValid = false;
     board.focusValid = false;
     alerts.clear();
-    addLog("=== Combat ended ===", COL_MUTED);
+    addLog(T("=== Combat ended ==="), COL_MUTED);
 }
 
 // ---- Party
@@ -406,7 +421,7 @@ void App::saveToParty(const Creature& c) {
     if (it != party.end()) *it = t;
     else party.push_back(t);
     saveParty();
-    statusMsg = "Saved " + t.name + " to the party.";
+    statusMsg = TF("Saved %s to the party.", t.name.c_str());
 }
 
 std::vector<PlayerTemplate> App::partyMissing() const {
@@ -436,7 +451,7 @@ std::vector<CardRef> App::addPartyMembers(const std::vector<PlayerTemplate>& mem
         added.push_back(r);
         names += (names.empty() ? "" : ", ") + todo[i].name;
     }
-    addLog("Added " + names, COL_MUTED);
+    addLog(TF("Added %s", names.c_str()), COL_MUTED);
     return added;
 }
 
@@ -462,7 +477,7 @@ void App::duplicate(const std::vector<CardRef>& refs) {
         const CardRef nr = addCombatant(encounter, board, copies[i].first, c);
         board.get(nr).selected = true;
         board.get(nr).spawnT = -0.06f * static_cast<float>(i);  // staggered fade-in
-        addLog("Added " + c.getName(), COL_MUTED);
+        addLog(TF("Added %s", c.getName().c_str()), COL_MUTED);
     }
 }
 
@@ -472,7 +487,7 @@ void App::deleteRefs(const std::vector<CardRef>& refs, bool alreadyPushedUndo) {
     std::string names;
     for (CardRef r : refs) names += (names.empty() ? "" : ", ") + nameOf(r);
     removeCombatants(encounter, board, refs);
-    addLog("Removed " + names, COL_MUTED);
+    addLog(TF("Removed %s", names.c_str()), COL_MUTED);
 }
 
 std::vector<CardRef> App::addFromTemplate(const MonsterTemplate& t, Side side, int count) {
@@ -488,7 +503,7 @@ std::vector<CardRef> App::addFromTemplate(const MonsterTemplate& t, Side side, i
         board.get(r).spawnT = -0.06f * static_cast<float>(i);  // staggered fade-in
         added.push_back(r);
     }
-    addLog("Added " + std::to_string(count) + " x " + t.name, COL_MUTED);
+    addLog(TF("Added %d x %s", count, t.name.c_str()), COL_MUTED);
     return added;
 }
 
@@ -516,11 +531,11 @@ void App::makeQr(const std::string& text) {
 void App::startSharing() {
     shareError.clear();
     if (!playerServer.start(8080)) {
-        shareError = "Couldn't open a port for the player screens (8080-8099 are all busy).";
+        shareError = "Couldn't open a port for the player screens (8080-8099 are all busy).";  // translated when shown
         return;
     }
     shareUrl = playerServer.url();
     makeQr(shareUrl);
     lastPublished.clear();  // publish right away
-    addLog("Player screens on at " + shareUrl, COL_MUTED);
+    addLog(TF("Player screens on at %s", shareUrl.c_str()), COL_MUTED);
 }

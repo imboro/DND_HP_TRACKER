@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "difficulty.h"
+#include "i18n.h"
 #include "looks.h"
 #include "ui_kit.h"
 
@@ -212,9 +213,10 @@ void drawCardEffects(const CardState& st, ImVec2 size, float S) {
             const float fade = u < 0.6f ? 1.0f : 1.0f - (u - 0.6f) / 0.4f;
             const float pop = u < 0.1f ? lerpf(0.6f, 1.0f, easeOutCubic(u / 0.1f)) : 1.0f;
             const float mul = 1.35f * pop;
-            const ImVec2 ts = heavyTextSize(st.deathLabel.c_str(), mul);
+            const char* deathText = T(st.deathLabel);  // stored in English
+            const ImVec2 ts = heavyTextSize(deathText, mul);
             const ImVec2 pos(p.x + size.x * 0.5f - ts.x * 0.5f, p.y - 6 * S - rise - ts.y * 0.5f);
-            outlinedText(dl, pos, IM_COL32(205, 205, 200, 255), static_cast<int>(255 * fade), st.deathLabel.c_str(), mul, S);
+            outlinedText(dl, pos, IM_COL32(205, 205, 200, 255), static_cast<int>(255 * fade), deathText, mul, S);
         }
     }
 
@@ -261,7 +263,7 @@ void drawCardEffects(const CardState& st, ImVec2 size, float S) {
         }
         dl->AddPolyline(pts.data(), n, COL_SHADOW, ImDrawFlags_Closed, 2.0f * S);
 
-        const char* label = st.heal ? "HEAL!" : "CRIT!";
+        const char* label = T(st.heal ? "HEAL!" : "CRIT!");
         const float mul = std::max(0.2f, scale);
         const ImVec2 ts = heavyTextSize(label, 0.95f * mul);
         outlinedText(dl, ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), IM_COL32(255, 255, 255, 255),
@@ -323,26 +325,26 @@ static std::vector<Chip> cardChips(Side side, const Creature& c, Life life, floa
     std::vector<Chip> chips;
     if (life == Life::Dying) {
         const int a = 170 + static_cast<int>(85 * (0.5f + 0.5f * std::sin(time * 6.0f)));
-        chips.push_back({"DYING", withAlpha(COL_RED, a)});
+        chips.push_back({T("DYING"), withAlpha(COL_RED, a)});
     } else if (life == Life::Stable) {
-        chips.push_back({"STABLE", COL_GREEN});
+        chips.push_back({T("STABLE"), COL_GREEN});
     } else if (life == Life::Dead && side == Side::Players) {
-        chips.push_back({"DEAD", COL_GRAY});
+        chips.push_back({T("DEAD"), COL_GRAY});
     }
-    if (c.isBloodied()) chips.push_back({"BLOODIED", COL_RED});
-    if (c.isConcentrating()) chips.push_back({"CONC", COL_VIOLET});
+    if (c.isBloodied()) chips.push_back({T("BLOODIED"), COL_RED});
+    if (c.isConcentrating()) chips.push_back({T("CONC"), COL_VIOLET});
     switch (c.getDamageMod()) {
-        case DamageMod::Resistant:  chips.push_back({"RESIST", IM_COL32(217, 119, 6, 255)}); break;
-        case DamageMod::Vulnerable: chips.push_back({"VULN", IM_COL32(219, 39, 119, 255)}); break;
-        case DamageMod::Immune:     chips.push_back({"IMMUNE", COL_GRAY}); break;
+        case DamageMod::Resistant:  chips.push_back({T("RESIST"), IM_COL32(217, 119, 6, 255)}); break;
+        case DamageMod::Vulnerable: chips.push_back({T("VULN"), IM_COL32(219, 39, 119, 255)}); break;
+        case DamageMod::Immune:     chips.push_back({T("IMMUNE"), COL_GRAY}); break;
         default: break;
     }
     for (const Condition& cond : c.getConditions()) {
-        std::string text = cond.name;
+        std::string text = TKnown(cond.name);
         if (cond.rounds > 0) text += " " + std::to_string(cond.rounds);
         chips.push_back({text, IM_COL32(202, 138, 4, 255)});
     }
-    if (!c.getNotes().empty()) chips.push_back({"NOTE", COL_PLAYER});
+    if (!c.getNotes().empty()) chips.push_back({T("NOTE"), COL_PLAYER});
     return chips;
 }
 
@@ -351,33 +353,33 @@ static void cardTooltip(Side side, const Creature& c) {
     ImGui::BeginTooltip();
     ImGui::PushTextWrapPos(300 * S);
     ImGui::TextUnformatted(c.getName().c_str());
-    ImGui::TextDisabled("%s", side == Side::Players ? "Player" : "Enemy");
+    ImGui::TextDisabled("%s", T(side == Side::Players ? "Player" : "Enemy"));
     ImGui::Separator();
-    ImGui::Text("HP %d / %d", c.getCurrentHp(), c.getMaxHp());
+    ImGui::TextUnformatted(TF("HP %d / %d", c.getCurrentHp(), c.getMaxHp()).c_str());
     if (c.getTempHp() > 0) {
         ImGui::SameLine();
-        ImGui::TextColored(toVec4(COL_TEMP), "+%d temp", c.getTempHp());
+        ImGui::TextColored(toVec4(COL_TEMP), "%s", TF("+%d temp", c.getTempHp()).c_str());
     }
-    ImGui::Text("AC %d   Speed %d ft   Passive Perception %d", c.getAc(), c.getSpeed(), c.getPassivePerception());
+    ImGui::TextUnformatted(TF("AC %d   Speed %d ft   Passive Perception %d", c.getAc(), c.getSpeed(), c.getPassivePerception()).c_str());
     if (side == Side::Players) {
-        ImGui::Text("Level %d", c.getLevel());
+        ImGui::TextUnformatted(TF("Level %d", c.getLevel()).c_str());
     } else if (c.getCrIndex() >= 0) {
-        ImGui::Text("CR %s (%d XP)", crLabel(c.getCrIndex()), crXp(c.getCrIndex()));
+        ImGui::TextUnformatted(TF("CR %s (%d XP)", crLabel(c.getCrIndex()), crXp(c.getCrIndex())).c_str());
     }
     if (c.getDamageMod() != DamageMod::Normal) {
-        ImGui::Text("Damage: %s", damageModName(c.getDamageMod()));
+        ImGui::TextUnformatted(TF("Damage: %s", T(damageModName(c.getDamageMod()))).c_str());
     }
-    if (c.isConcentrating()) ImGui::Text("Concentrating");
+    if (c.isConcentrating()) ImGui::TextUnformatted(T("Concentrating"));
     if (side == Side::Players && c.getCurrentHp() == 0) {
-        ImGui::Text("Death saves: %d success, %d failure", c.getDeathSuccesses(), c.getDeathFailures());
+        ImGui::TextUnformatted(TF("Death saves: %d success, %d failure", c.getDeathSuccesses(), c.getDeathFailures()).c_str());
     }
     if (!c.getConditions().empty()) {
         ImGui::Separator();
         for (const Condition& cond : c.getConditions()) {
             if (cond.rounds > 0) {
-                ImGui::BulletText("%s (%d round%s left)", cond.name.c_str(), cond.rounds, cond.rounds == 1 ? "" : "s");
+                ImGui::BulletText("%s", TF(cond.rounds == 1 ? "%s (%d round left)" : "%s (%d rounds left)", TKnown(cond.name), cond.rounds).c_str());
             } else {
-                ImGui::BulletText("%s", cond.name.c_str());
+                ImGui::BulletText("%s", TKnown(cond.name));
             }
         }
     }
@@ -425,7 +427,7 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
                           !(st.active && st.fxKind == FxKind::Damage && st.t < ANIM_HOLD + ANIM_DROP);
     if (showDead && !st.wasDead) {
         st.deathT = 0.0f;
-        st.deathLabel = side == Side::Players ? "DEAD" : "DEFEATED";
+        st.deathLabel = side == Side::Players ? "DEAD" : "DEFEATED";  // English; translated when drawn
     }
     st.wasDead = showDead;
     if (st.deathT < DEATH_LEN) st.deathT += dt;
@@ -550,11 +552,11 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
     };
     ImGui::SetCursorScreenPos(dmgMin);
     if (flatButton("##dmg", ImVec2(btn, btn), BTN_RED, true, interactive)) act.damage(ref);
-    if (interactive && ImGui::IsItemHovered()) ImGui::SetTooltip("Damage %s", amountLabel.c_str());
+    if (interactive && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", TF("Damage %s", amountLabel.c_str()).c_str());
     sign(dmgMin, false, BTN_RED.text);
     ImGui::SetCursorScreenPos(healMin);
     if (flatButton("##heal", ImVec2(btn, btn), BTN_GREEN, true, interactive)) act.heal(ref);
-    if (interactive && ImGui::IsItemHovered()) ImGui::SetTooltip("Heal %s", amountLabel.c_str());
+    if (interactive && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", TF("Heal %s", amountLabel.c_str()).c_str());
     sign(healMin, true, BTN_GREEN.text);
 
     const float lineH = ImGui::GetTextLineHeight();
@@ -625,7 +627,7 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
                         else act.setDeathSaves(ref, c.getDeathSuccesses(), value);
                     }
                     if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip("%s", success ? "Death save successes" : "Death save failures");
+                        ImGui::SetTooltip("%s", T(success ? "Death save successes" : "Death save failures"));
                     }
                     ImGui::PopID();
                 }
@@ -674,7 +676,8 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
     if (st.turnAnim > 0.02f) {
         const float k = easeOutCubic(st.turnAnim);
         const float rh = 16 * S;
-        const ImVec2 tw = fontTextSize(boldFont(), "TURN", 0.74f);
+        const char* turnText = T("TURN");
+        const ImVec2 tw = fontTextSize(boldFont(), turnText, 0.74f);
         const float rw = 13 * S + tw.x + 18 * S;
         const ImVec2 r0(p.x + 14 * S, p.y - rh * 0.6f - (1.0f - k) * 6 * S);
         const ImVec2 r1(r0.x + rw, r0.y + rh);
@@ -686,7 +689,7 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
             hot = ImGui::IsItemHovered();
             if (hot) {
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-                ImGui::SetTooltip("Next turn (Space)");
+                ImGui::SetTooltip("%s", T("Next turn (Space)"));
             }
         }
         dl->AddRectFilled(r0, r1, fadeAlpha(hot ? IM_COL32(64, 64, 66, 255) : COL_INK, k), rh * 0.5f);
@@ -694,7 +697,7 @@ void drawToken(const Encounter& encounter, CardRef ref, CardState& st, ImVec2 bo
         const float tx = r0.x + 8 * S;
         dl->AddTriangleFilled(ImVec2(tx, mid - 3.5f * S), ImVec2(tx, mid + 3.5f * S), ImVec2(tx + 6 * S, mid),
                               fadeAlpha(COL_WHITE, k));
-        fontText(dl, boldFont(), ImVec2(tx + 11 * S, mid - tw.y * 0.5f), fadeAlpha(COL_WHITE, k), "TURN", 0.74f);
+        fontText(dl, boldFont(), ImVec2(tx + 11 * S, mid - tw.y * 0.5f), fadeAlpha(COL_WHITE, k), turnText, 0.74f);
     }
 
     // The whole card is the drag handle. It is submitted last so the buttons
@@ -770,14 +773,15 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
         if (dead) drawCross(dl, go, icon * 0.7f, 2.8f * S, accent);
         else drawCreatureIcon(dl, side, c, go, icon * 0.7f, 2.8f * S, accent);
 
-        std::string what = side == Side::Players ? "Player  \xC2\xB7  Level " + std::to_string(c.getLevel()) : "Enemy";
+        std::string what = side == Side::Players ? TF("Player  \xC2\xB7  Level %d", c.getLevel()) : std::string(T("Enemy"));
         if (side == Side::Creatures && c.getCrIndex() >= 0) {
-            what += std::string("  \xC2\xB7  CR ") + crLabel(c.getCrIndex()) + "  \xC2\xB7  " +
+            what += "  \xC2\xB7  " + TF("CR %s", crLabel(c.getCrIndex())) + "  \xC2\xB7  " +
                     std::to_string(crXp(c.getCrIndex())) + " XP";
         }
         float nameRight = x1;
         if (holdsTurn) {
-            const ImVec2 tw = boldTextSize("TURN", 0.85f);
+            const char* turnText = T("TURN");
+            const ImVec2 tw = boldTextSize(turnText, 0.85f);
             const float ph = 24 * S, pw = tw.x + 34 * S;
             const ImVec2 p0(x1 - pw, y + 2 * S), p1(x1, y + 2 * S + ph);
             // Black on a white panel, white on a dark one.
@@ -785,7 +789,7 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
             dl->AddRectFilled(p0, p1, pillFill, ph * 0.5f);
             const float mid = (p0.y + p1.y) * 0.5f, tx = p0.x + 11 * S;
             dl->AddTriangleFilled(ImVec2(tx, mid - 4.5f * S), ImVec2(tx, mid + 4.5f * S), ImVec2(tx + 8 * S, mid), pillText);
-            boldText(dl, ImVec2(tx + 13 * S, mid - tw.y * 0.5f), pillText, "TURN", 0.85f);
+            boldText(dl, ImVec2(tx + 13 * S, mid - tw.y * 0.5f), pillText, turnText, 0.85f);
             nameRight = p0.x - 10 * S;
         }
         const float nx = iconMax.x + 14 * S;
@@ -799,13 +803,13 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
     // Big HP, then a thick bar (same pre-bar animation as the row).
     {
         const std::string cur = std::to_string(c.getCurrentHp());
-        const std::string rest = " / " + std::to_string(c.getMaxHp()) + " HP";
+        const std::string rest = " / " + TF("%d HP", c.getMaxHp());
         const ImVec2 cs = heavyTextSize(cur.c_str(), 2.0f);
         heavyText(dl, ImVec2(x0, y), textCol, cur.c_str(), 2.0f);
         const float restY = y + cs.y - lineH * 1.15f;
         dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.15f, ImVec2(x0 + cs.x + 4 * S, restY), mutedCol, rest.c_str());
         if (c.getTempHp() > 0) {
-            const std::string temp = "+" + std::to_string(c.getTempHp()) + " temp";
+            const std::string temp = TF("+%d temp", c.getTempHp());
             const ImVec2 rs = sizedTextSize(rest.c_str(), 1.15f);
             dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.15f, ImVec2(x0 + cs.x + 12 * S + rs.x, restY), COL_TEMP, temp.c_str());
         }
@@ -840,13 +844,12 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
 
     // Stats line.
     {
-        std::string stats = "AC " + std::to_string(c.getAc()) + "   \xC2\xB7   Speed " + std::to_string(c.getSpeed()) +
-                            " ft   \xC2\xB7   Passive Perception " + std::to_string(c.getPassivePerception());
-        if (c.getDamageMod() != DamageMod::Normal) stats += std::string("   \xC2\xB7   ") + damageModName(c.getDamageMod());
+        std::string stats = TF("AC %d   \xC2\xB7   Speed %d ft   \xC2\xB7   Passive Perception %d", c.getAc(), c.getSpeed(),
+                               c.getPassivePerception());
+        if (c.getDamageMod() != DamageMod::Normal) stats += std::string("   \xC2\xB7   ") + T(damageModName(c.getDamageMod()));
         if (ImGui::CalcTextSize(stats.c_str()).x > x1 - x0) {  // narrow panel: the short form
-            stats = "AC " + std::to_string(c.getAc()) + "  \xC2\xB7  " + std::to_string(c.getSpeed()) + " ft  \xC2\xB7  PP " +
-                    std::to_string(c.getPassivePerception());
-            if (c.getDamageMod() != DamageMod::Normal) stats += std::string("  \xC2\xB7  ") + damageModName(c.getDamageMod());
+            stats = TF("AC %d  \xC2\xB7  %d ft  \xC2\xB7  PP %d", c.getAc(), c.getSpeed(), c.getPassivePerception());
+            if (c.getDamageMod() != DamageMod::Normal) stats += std::string("  \xC2\xB7  ") + T(damageModName(c.getDamageMod()));
         }
         dl->AddText(ImVec2(x0, y), mutedCol, stats.c_str());
         y += lineH + 14 * S;
@@ -854,9 +857,9 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
 
     // Death saves (players at 0 HP): big pips, click to set.
     if (side == Side::Players && c.getCurrentHp() == 0) {
-        dl->AddText(ImVec2(x0, y + 2 * S), COL_TEXT, "Death saves");
+        dl->AddText(ImVec2(x0, y + 2 * S), COL_TEXT, T("Death saves"));
         const float d = 18 * S, gap = 6 * S;
-        float x = x0 + ImGui::CalcTextSize("Death saves").x + 16 * S;
+        float x = x0 + ImGui::CalcTextSize(T("Death saves")).x + 16 * S;
         for (int group = 0; group < 2; group++) {
             const bool success = group == 0;
             const int have = success ? c.getDeathSuccesses() : c.getDeathFailures();
@@ -872,7 +875,7 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
                     if (success) act.setDeathSaves(ref, value, c.getDeathFailures());
                     else act.setDeathSaves(ref, c.getDeathSuccesses(), value);
                 }
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", success ? "Death save successes" : "Death save failures");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", T(success ? "Death save successes" : "Death save failures"));
                 ImGui::PopID();
                 x += d + gap;
             }
@@ -893,13 +896,13 @@ void drawSpotlight(const Encounter& encounter, CardRef ref, CardState& st, ImVec
                                              y + (bh + gap) * static_cast<float>(i / perRow)));
         };
         at(0);
-        if (flatButton(("Damage " + amountLabel + "##spot").c_str(), ImVec2(bw, bh), BTN_RED)) act.damage(ref);
+        if (flatButton((TF("Damage %s", amountLabel.c_str()) + "##spot").c_str(), ImVec2(bw, bh), BTN_RED)) act.damage(ref);
         at(1);
-        if (flatButton(("Heal " + amountLabel + "##spot").c_str(), ImVec2(bw, bh), BTN_GREEN)) act.heal(ref);
+        if (flatButton((TF("Heal %s", amountLabel.c_str()) + "##spot").c_str(), ImVec2(bw, bh), BTN_GREEN)) act.heal(ref);
         at(2);
-        if (flatButton(("+" + amountLabel + " temp HP##spot").c_str(), ImVec2(bw, bh), BTN_TEMP)) act.temp(ref);
+        if (flatButton((TF("+%s temp HP", amountLabel.c_str()) + "##spot").c_str(), ImVec2(bw, bh), BTN_TEMP)) act.temp(ref);
         at(3);
-        if (flatButton("Edit...##spot", ImVec2(bw, bh), BTN_QUIET)) act.edit(ref);
+        if (flatButton((std::string(T("Edit...")) + "##spot").c_str(), ImVec2(bw, bh), BTN_QUIET)) act.edit(ref);
         y += (bh + gap) * static_cast<float>(4 / perRow) - gap + 16 * S;
     }
 

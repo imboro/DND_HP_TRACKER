@@ -44,6 +44,9 @@ public:
     // Counts down every timed condition by one round.
     // Returns lines like "Goblin 2: Poisoned ended".
     std::vector<std::string> tickConditions();
+    // The same, as (creature name, condition name) pairs, for callers that word the
+    // message themselves (e.g. in another language).
+    std::vector<std::pair<std::string, std::string>> tickConditionsEnded();
 
     Creature* at(Side side, int index);
     const Creature* at(Side side, int index) const;

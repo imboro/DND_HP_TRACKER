@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <sstream>
 
+#include "i18n.h"
 #include "looks.h"
 
 static std::string jsonString(const std::string& s) {
@@ -34,12 +35,13 @@ static std::string jsonColor(ImU32 c) {
     return jsonString(buf);
 }
 
-// What the phones may see: the round, whose turn it is and the turn order. Players
+// What the phones may see (in the app's language, sent as "lang"): the round, whose turn it is and the turn order. Players
 // come with their stats; enemies only with their name and look (no HP), and they
 // only appear once combat has started (setup stays a surprise) and until defeated.
 std::string playerStateJson(const Encounter& encounter, const BoardState& board) {
     std::ostringstream o;
-    o << "{\"combat\":" << (board.inCombat ? "true" : "false") << ",\"round\":" << board.round << ",\"turn\":";
+    o << "{\"lang\":\"" << langCode(language()) << "\",\"combat\":" << (board.inCombat ? "true" : "false")
+      << ",\"round\":" << board.round << ",\"turn\":";
     const Creature* turn = board.inCombat && board.turnValid ? encounter.at(board.turn.side, board.turn.index) : nullptr;
     o << (turn ? jsonString(turn->getName()) : std::string("null")) << ",\"order\":[";
     bool firstItem = true;
@@ -61,11 +63,11 @@ std::string playerStateJson(const Encounter& encounter, const BoardState& board)
               << ",\"saves\":[" << c->getDeathSuccesses() << ',' << c->getDeathFailures() << ']'
               << ",\"conc\":" << (c->isConcentrating() ? "true" : "false")
               << ",\"bloodied\":" << (c->isBloodied() ? "true" : "false")
-              << ",\"mod\":" << jsonString(c->getDamageMod() == DamageMod::Normal ? "" : damageModName(c->getDamageMod()))
+              << ",\"mod\":" << jsonString(c->getDamageMod() == DamageMod::Normal ? "" : T(damageModName(c->getDamageMod())))
               << ",\"conditions\":[";
             for (size_t i = 0; i < c->getConditions().size(); i++) {
                 const Condition& cond = c->getConditions()[i];
-                o << (i ? "," : "") << '[' << jsonString(cond.name) << ',' << cond.rounds << ']';
+                o << (i ? "," : "") << '[' << jsonString(TKnown(cond.name)) << ',' << cond.rounds << ']';
             }
             o << ']';
         }

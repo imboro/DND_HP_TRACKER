@@ -16,6 +16,7 @@ mkdir -p "$OUT"
 cd "$ROOT"
 rm -f "$OUT"/gui_test.cpp "$OUT"/gui_test "$OUT"/test_save.txt "$OUT"/test_library.txt "$OUT"/test_settings.txt "$OUT"/test_party.txt "$OUT"/*.bmp "$OUT"/*.png
 
+python3 "$ROOT/tools/check_translations.py" || exit 1
 python3 "$HERE/make_harness.py" gui "$HERE/test_body.inc" "$OUT/gui" "$OUT"
 
 I=third_party/imgui

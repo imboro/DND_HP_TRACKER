@@ -155,8 +155,10 @@ void endSection();
 
 // A labelled pill: white with an ink outline and a colored dot.
 void pill(const char* text, ImU32 color, float S);
-// Pill-shaped segmented control (the sidebar tabs). Sets *active when one is clicked.
-void segmentedTabs(const char* const* labels, int count, int* active, float S);
+// Pill-shaped segmented control (the sidebar tabs, the language switch). Sets *active
+// when one is clicked. Width and height 0 = the full row and the usual height. Two in
+// the same window need different IDs (PushID), as the sliding pill is kept by ID.
+void segmentedTabs(const char* const* labels, int count, int* active, float S, float width = 0.0f, float height = 0.0f);
 
 // ---- Line icons ------------------------------------------------------------------------
 // Each one is drawn in the box [o, o + s].

@@ -6,6 +6,7 @@
 #include "imgui_internal.h"
 #include "board_view.h"
 #include "difficulty.h"
+#include "i18n.h"
 #include "ui_kit.h"
 
 // The board: the Turn order list on the left; on the right the spotlight (one card
@@ -200,7 +201,7 @@ void App::drawBoard(float height, float panelRound, bool anyPopup) {
     // ---- Column panels (behind the cards).
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        const char* titles[2] = {"Turn order", "Defeated"};
+        const char* titles[2] = {T("Turn order"), T("Defeated")};
         for (int col = 0; col < 2; col++) {
             const ImVec2 a = boardOrigin + colMin[col], b = boardOrigin + colMax[col];
             inkBox(dl, a, b, 18 * S, S, IM_COL32(241, 241, 237, 255), 3.0f);
@@ -211,13 +212,13 @@ void App::drawBoard(float height, float panelRound, bool anyPopup) {
             dl->AddText(ImVec2(a.x + 16 * S + ts.x + 8 * S, a.y + 12 * S + (ts.y - ImGui::GetTextLineHeight()) * 0.5f),
                         COL_MUTED, count.c_str());
             if (col == 0) {
-                const std::string roundText = board.inCombat ? "Round " + std::to_string(board.round) : std::string("Setup");
+                const std::string roundText = board.inCombat ? TF("Round %d", board.round) : std::string(T("Setup"));
                 const ImVec2 rs = boldTextSize(roundText.c_str(), 0.95f);
                 boldText(dl, ImVec2(b.x - 16 * S - rs.x, a.y + 12 * S + (ts.y - rs.y) * 0.5f), COL_MUTED,
                          roundText.c_str(), 0.95f);
             }
             if (colList[col].empty()) {
-                const char* hint = col == 0 ? "Right-click to add a character" : "Defeated creatures fall here";
+                const char* hint = col == 0 ? T("Right-click to add a character") : T("Defeated creatures fall here");
                 const ImVec2 hs = ImGui::CalcTextSize(hint);
                 dl->AddText(ImVec2((a.x + b.x - hs.x) * 0.5f, a.y + colHeader + 30 * S), COL_MUTED, hint);
             }
@@ -315,8 +316,8 @@ void App::drawBoard(float height, float panelRound, bool anyPopup) {
         pushUndo();
         Creature* c = encounter.at(r.side, r.index);
         c->setDeathSaves(s, f);
-        if (s >= 3) addLog(c->getName() + " is stable", COL_GREEN);
-        if (f >= 3) addAlert(c->getName() + " has died", COL_RED);
+        if (s >= 3) addLog(TF("%s is stable", c->getName().c_str()), COL_GREEN);
+        if (f >= 3) addAlert(TF("%s has died", c->getName().c_str()), COL_RED);
     };
     actions.nextTurn = [&]() { nextTurn(); };
     actions.temp = [&](CardRef r) {
@@ -371,7 +372,7 @@ void App::drawBoard(float height, float panelRound, bool anyPopup) {
                 const bool holdsTurn = board.turnValid && board.focus == board.turn;
                 drawSpotlight(encounter, board.focus, board.get(board.focus), a, b, amountLabel, holdsTurn, actions);
             } else {
-                const char* hint = "Click a card to see it here";
+                const char* hint = T("Click a card to see it here");
                 const ImVec2 hs = ImGui::CalcTextSize(hint);
                 ImGui::GetWindowDrawList()->AddText(ImVec2((a.x + b.x - hs.x) * 0.5f, (a.y + b.y - hs.y) * 0.5f), COL_MUTED, hint);
             }
@@ -453,7 +454,7 @@ void App::drawSetupPanel(ImVec2 a, ImVec2 b) {
     const float x0 = a.x + pad, x1 = b.x - pad;
     const float lineH = ImGui::GetTextLineHeight();
     float y = a.y + pad;
-    const char* title = "Set up the encounter";
+    const char* title = T("Set up the encounter");
     heavyText(dl, ImVec2(x0, y), COL_TEXT, title, 1.45f);
     y += heavyTextSize(title, 1.45f).y + 14 * S;
 
@@ -467,21 +468,21 @@ void App::drawSetupPanel(ImVec2 a, ImVec2 b) {
         enemies++;
         xps.push_back(crXp(c.getCrIndex()));
     }
-    const std::string counts = std::to_string(players) + (players == 1 ? " player" : " players") + "   \xC2\xB7   " +
-                               std::to_string(enemies) + (enemies == 1 ? " enemy" : " enemies");
+    const std::string counts = TF(players == 1 ? "%d player" : "%d players", players) + "   \xC2\xB7   " +
+                               TF(enemies == 1 ? "%d enemy" : "%d enemies", enemies);
     boldText(dl, ImVec2(x0, y), COL_TEXT, counts.c_str());
     y += lineH + 6 * S;
     const DifficultyReport dr = rateEncounter(levels, xps);
-    const std::string diff = dr.valid ? std::string("Difficulty: ") + difficultyName(dr.rating) + "   \xC2\xB7   " +
-                                            std::to_string(dr.adjustedXp) + " adjusted XP"
-                                      : std::string("Difficulty: set player levels and monster CRs");
+    const std::string diff = dr.valid ? TF("Difficulty: %s", T(difficultyName(dr.rating))) + "   \xC2\xB7   " +
+                                            TF("%d adjusted XP", dr.adjustedXp)
+                                      : std::string(T("Difficulty: set player levels and monster CRs"));
     dl->AddText(ImVec2(x0, y), COL_MUTED, diff.c_str());
     y += lineH + 20 * S;
 
     const char* tips[] = {
-        "Right-click the list to add a new character, or a monster from the library.",
-        "Drag the cards into turn order: the top card acts first.",
-        "Double-click a card to edit it.",
+        T("Right-click the list to add a new character, or a monster from the library."),
+        T("Drag the cards into turn order: the top card acts first."),
+        T("Double-click a card to edit it."),
     };
     for (const char* tip : tips) {
         dl->AddCircleFilled(ImVec2(x0 + 4 * S, y + lineH * 0.5f), 3 * S, COL_INK);
@@ -499,8 +500,8 @@ void App::drawSetupPanel(ImVec2 a, ImVec2 b) {
     float by = std::max(y + 6 * S, b.y - pad - total);
     {
         const std::string label = playerServer.running()
-            ? "Player screens: " + std::to_string(playerServer.viewers()) + " connected##setup"
-            : std::string("Show the QR for player screens##setup");
+            ? TF("Player screens: %d connected", playerServer.viewers()) + "##setup"
+            : std::string(T("Show the QR for player screens")) + "##setup";
         ImGui::SetCursorScreenPos(ImVec2(x0, by));
         if (quietButton(label.c_str(), ImVec2(x1 - x0, ph))) openShare = true;
         by += ph + gap;
@@ -510,10 +511,10 @@ void App::drawSetupPanel(ImVec2 a, ImVec2 b) {
         const std::vector<PlayerTemplate> missing = partyMissing();
         const float partyY = by;
         ImGui::SetCursorScreenPos(ImVec2(x0, partyY));
-        const std::string label = missing.empty() ? std::string("The whole party is here##setup")
-                                                  : "Add the party (" + std::to_string(missing.size()) + ")##setup";
+        const std::string label = (missing.empty() ? std::string(T("The whole party is here"))
+                                                   : TF("Add the party (%d)", static_cast<int>(missing.size()))) + "##setup";
         if (quietButton(label.c_str(), ImVec2(x1 - x0, ph), !missing.empty())) addPartyMembers(missing);
     }
     ImGui::SetCursorScreenPos(ImVec2(x0, startY));
-    if (primaryButton("Start combat", ImVec2(x1 - x0, bh), anyoneStanding())) startCombat();
+    if (primaryButton(T("Start combat"), ImVec2(x1 - x0, bh), anyoneStanding())) startCombat();
 }

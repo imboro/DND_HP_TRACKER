@@ -18,6 +18,7 @@
             auto check = [](bool ok, const std::string& what) { std::printf("%s  %s\n", ok ? "PASS" : "FAIL", what.c_str()); if (!ok) fails++; };
 
             if (frame == 1) {
+                setLanguage(Lang::English);  // the checks below click buttons by their English labels
                 static const float s = UI_SCALE;
                 static auto findRef = [&](const std::string& n) {
                     for (int i = 0; i < (int)encounter.getPlayers().size(); i++) if (encounter.getPlayers()[i].getName() == n) return CardRef{Side::Players, i};
@@ -300,6 +301,28 @@
                                 check(std::fabs(st.damageCenter.x - (st.healCenter.x - 26 * s * 0.6f - 6 * s * 0.6f)) < 1.0f,
                                       "at 60% card size the damage and heal buttons keep their layout"); });
                 act(2, [&]() { g_cardScale = 1.0f; });
+                // Languages: the same screen in Spanish and in Catalan, every text translated.
+                act(2, [&]() { setLanguage(Lang::Spanish); g_rects.clear(); });
+                act(12, [&]() { g_shot = "18c_spanish";
+                                check(g_rects.count("Siguiente turno") && g_rects.count("Terminar combate"),
+                                      "Spanish: the combat buttons are translated"); });
+                act(2, [&]() { board.selectAll(); g_scrollCombat = 0; });
+                act(12, [&]() { g_shot = "18e_spanish_selection"; g_scrollCombat = -1; });
+                act(2, [&]() { const CardRef r = findRef("Aria"); editRef = r; editCopy = *C("Aria");
+                               std::snprintf(editName, sizeof(editName), "%s", editCopy->getName().c_str()); editNotes[0] = '\0'; openEdit = true; });
+                act(14, [&]() { g_shot = "18f_spanish_edit"; });
+                act(2, [&]() { key(true, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); });
+                act(2, [&]() { key(false, SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0); board.clearSelection(); });
+                act(2, [&]() { setLanguage(Lang::Catalan); g_rects.clear(); });
+                act(12, [&]() { g_shot = "18d_catalan";
+                                check(g_rects.count("Torn següent") && g_rects.count("Acabar combat"),
+                                      "Catalan: the combat buttons are translated"); });
+                act(2, [&]() { setLanguage(Lang::English); g_rects.clear(); });
+                act(6, [&]() {
+                    std::string missing;
+                    for (const std::string& k : missingTranslations()) missing += " [" + k + "]";
+                    check(missingTranslations().empty(), "no untranslated text shown in Spanish or Catalan" + missing);
+                    check(g_rects.count("Next turn") > 0, "back to English"); });
                 clickAt([=]() { return rectCenter("End combat"); });
                 act(20, [&]() { check(!board.inCombat && encounter.getCreatures().empty() && exists("Aria") && exists("Dax") && C("Dax")->getCurrentHp() == 0,
                                       "End combat: enemies leave, the party stays as it is, back to setup"); g_scrollTo.clear(); });
@@ -383,7 +406,7 @@
                     std::printf("  phone URL: %s\n", shareUrl.c_str());
                 });
                 act(25, [&]() {
-                    ImGuiWindow* w = ImGui::FindWindowByName("Player screens");
+                    ImGuiWindow* w = ImGui::FindWindowByName("###share");
                     const ImVec2 c = ImGui::GetMainViewport()->GetCenter();
                     const bool centered = w && std::fabs(w->Pos.x + w->Size.x * 0.5f - c.x) < 2.0f && std::fabs(w->Pos.y + w->Size.y * 0.5f - c.y) < 2.0f;
                     check(centered, "the QR window stays centered once the QR code appears");
@@ -413,6 +436,20 @@
                 act(1, [&]() {
                     std::ifstream last(g_outDir + "/phone_3.png");
                     check(last.good() && playerServer.viewers() >= 1, "a phone (WebKit) follows the page (" + std::to_string(playerServer.viewers()) + " connected)");
+                    setLanguage(Lang::Catalan);  // the phones follow the app's language
+                });
+                waitSeconds(0.4);
+                act(1, [&]() {
+                    const std::string out = g_outDir + "/phone_ca.txt";
+                    const std::string cmd = "SNAP_EVAL=\"document.getElementById('orderTitle').textContent + ' | ' + document.getElementById('meSub').textContent\" '" +
+                                            g_outDir + "/phone_snapshot' '" + localUrl("?me=Aria") + "' '" + g_outDir + "/phone_ca' 1.5 > '" + out + "' 2>&1";
+                    std::system(cmd.c_str());
+                    std::ifstream in(out);
+                    std::stringstream text;
+                    text << in.rdbuf();
+                    check(text.str().find("Ordre de torn | Nivell") != std::string::npos,
+                          "the phone page follows the app's language (" + text.str().substr(0, 60) + ")");
+                    setLanguage(Lang::English);
                     playerServer.stop();
                     check(!playerServer.running(), "player screens stop");
                 });

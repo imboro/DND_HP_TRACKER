@@ -18,10 +18,23 @@ agreed on, and the tracker follows it.
 
 ![The tracker in combat: sidebar on the left; on the board the Turn order list, the spotlight with the card whose turn it is, and the Defeated column](docs/screenshot.png)
 
+## Languages
+
+The app is in **English, Spanish and Catalan**: switch with **EN · ES · CA** at the top
+of the sidebar (it remembers the choice; the first time it follows the system's
+language). The players' phones follow the same language. Saved encounters don't
+depend on the language.
+
+For developers: every text goes through `T("English text")` (`gui/i18n.h`), and the
+translations are one table, `gui/i18n_table.inc` (English, Spanish, Catalan per row).
+`tools/check_translations.py` lists any text in the code without a row; the UI tests
+run it.
+
 ---
 
 ## Contents
 
+- [Languages](#languages)
 - [Quick start](#quick-start)
 - [The screen](#the-screen)
 - [Reading a card](#reading-a-card)
@@ -560,6 +573,7 @@ on their own (`tests/logic_tests.cpp`) and could be reused by another front end.
 | `looks.h/.cpp` | Card colors and icons, and the picker for them |
 | `ui_kit.h/.cpp` | The look: palette, fonts, ink-outline boxes, buttons, section boxes, tabs, line icons |
 | `alerts.h/.cpp` | The combat log entries and the alert toasts |
+| `i18n.h/.cpp`, `i18n_table.inc` | Languages: `T()` / `TF()` and the English / Spanish / Catalan table |
 | `undo_history.h/.cpp` | `UndoHistory`: undo / redo over saved snapshots |
 | `save_format.h/.cpp` | The save file format and file reading / writing |
 | `library.h/.cpp` | Monster library and party: templates and their files |
